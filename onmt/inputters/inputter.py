@@ -492,9 +492,10 @@ def batch_iter(data, batch_size, batch_size_fn=None, batch_size_multiple=1):
         def batch_size_fn(new, count, sofar):
             return count
     minibatch, size_so_far = [], 0
-    for ex in data:
+    for n_ex, ex in enumerate(data):
         minibatch.append(ex)
         size_so_far = batch_size_fn(ex, len(minibatch), size_so_far)
+        print("#%d len(minibatch) size_so_far %d %d" % (n_ex, len(minibatch), size_so_far))
         if size_so_far >= batch_size:
             overflowed = 0
             if size_so_far > batch_size:
@@ -503,10 +504,13 @@ def batch_iter(data, batch_size, batch_size_fn=None, batch_size_multiple=1):
                 overflowed += (
                     (len(minibatch) - overflowed) % batch_size_multiple)
             if overflowed == 0:
+                print("of0 YIELD MINIBATCH SIZE #%d %d" % (n_ex, len(minibatch)))
                 yield minibatch
                 minibatch, size_so_far = [], 0
             else:
-                yield minibatch[:-overflowed]
+                _m = minibatch[:-overflowed]
+                print("YIELD MINIBATCH SIZE #%d %d" % (n_ex, len(_m)))
+                yield _m
                 minibatch = minibatch[-overflowed:]
                 size_so_far = 0
                 for i, ex in enumerate(minibatch):
@@ -520,13 +524,17 @@ def _pool(data, batch_size, batch_size_fn, batch_size_multiple,
     for p in torchtext.data.batch(
             data, batch_size * pool_factor,
             batch_size_fn=batch_size_fn):
+        # print("_pool data: ", str(data))
         p_batch = list(batch_iter(
             sorted(p, key=sort_key),
             batch_size,
             batch_size_fn=batch_size_fn,
             batch_size_multiple=batch_size_multiple))
+        # print("_pool pbatch", str(p_batch))
         for b in random_shuffler(p_batch):
-            yield b
+            # do not remove it please even if it does not make sense
+            if len(b) > 0:
+                yield b
 
 
 class OrderedIterator(torchtext.data.Iterator):
@@ -579,6 +587,7 @@ class OrderedIterator(torchtext.data.Iterator):
         while True:
             self.init_epoch()
             for idx, minibatch in enumerate(self.batches):
+                # print("minibatch ", str(minibatch))
                 # fast-forward if loaded from state
                 if self._iterations_this_epoch > idx:
                     continue
@@ -783,7 +792,7 @@ def build_dataset_iter(corpus_type, fields, opt, is_train=True, multi=False):
         batch_size = opt.batch_size if is_train else opt.valid_batch_size
         batch_fn = max_tok_len \
             if is_train and opt.batch_type == "tokens" else None
-        batch_size_multiple = 8 if opt.model_dtype == "fp16" else 1
+        batch_size_multiple = 8 if opt.batch_size >= 8 and opt.model_dtype == "fp16" else 1
 
     device = "cuda" if opt.gpu_ranks else "cpu"
 
