@@ -533,7 +533,7 @@ def _pool(data, batch_size, batch_size_fn, batch_size_multiple,
         # print("_pool pbatch", str(p_batch))
         for b in random_shuffler(p_batch):
             # do not remove it please even if it does not make sense
-            if len(b) > 0:
+            if True or len(b) > 0:
                 yield b
 
 
@@ -792,8 +792,8 @@ def build_dataset_iter(corpus_type, fields, opt, is_train=True, multi=False):
         batch_size = opt.batch_size if is_train else opt.valid_batch_size
         batch_fn = max_tok_len \
             if is_train and opt.batch_type == "tokens" else None
-        batch_size_multiple = 8 if opt.batch_size >= 8 and opt.model_dtype == "fp16" else 1
-
+        # batch_size_multiple = 8 if opt.batch_size >= 8 and opt.model_dtype == "fp16" else 1
+        batch_size_multiple = 1
     device = "cuda" if opt.gpu_ranks else "cpu"
 
     return DatasetLazyIter(
