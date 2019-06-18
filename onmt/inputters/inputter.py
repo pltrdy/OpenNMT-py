@@ -649,12 +649,14 @@ class OrderedIterator(torchtext.data.Iterator):
                  pool_factor=1,
                  batch_size_multiple=1,
                  yield_raw_example=False,
+                 keep_order=False,
                  **kwargs):
         super(OrderedIterator, self).__init__(dataset, batch_size, **kwargs)
         self.batch_size_multiple = batch_size_multiple
         self.yield_raw_example = yield_raw_example
         self.dataset = dataset
         self.pool_factor = pool_factor
+        self.keep_order = keep_order
 
     def create_batches(self):
         if self.train:
@@ -680,7 +682,10 @@ class OrderedIterator(torchtext.data.Iterator):
                     self.batch_size,
                     batch_size_fn=self.batch_size_fn,
                     batch_size_multiple=self.batch_size_multiple):
-                self.batches.append(sorted(b, key=self.sort_key))
+                if self.keep_order:
+                    self.batches.append(b)
+                else:
+                    self.batches.append(sorted(b, key=self.sort_key))
 
     def __iter__(self):
         """
