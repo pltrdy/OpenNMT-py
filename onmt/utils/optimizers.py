@@ -83,7 +83,7 @@ def build_torch_optimizer(model, opt):
     else:
         raise ValueError('Invalid optimizer type: ' + opt.optim)
 
-    if opt.model_dtype == 'fp16':
+    if getattr(opt, 'model_dtype', 'fp32') == 'fp16':
         import apex
         loss_scale = "dynamic" if opt.loss_scale == 0 else opt.loss_scale
         model, optimizer = apex.amp.initialize(
