@@ -57,7 +57,9 @@ def build_trainer(opt, device_id, model, fields, optim, model_saver=None):
         opt.early_stopping, scorers=onmt.utils.scorers_from_opts(opt)) \
         if opt.early_stopping > 0 else None
 
-    report_manager = onmt.utils.build_report_manager(opt, gpu_rank)
+    decoder_sampling = getattr(opt, "decoder_sampling", 0.0)
+
+    report_manager = onmt.utils.build_report_manager(opt)
     trainer = onmt.Trainer(model, train_loss, valid_loss, optim, trunc_size,
                            shard_size, norm_method,
                            accum_count, accum_steps,
@@ -70,7 +72,8 @@ def build_trainer(opt, device_id, model, fields, optim, model_saver=None):
                            model_dtype=opt.model_dtype,
                            earlystopper=earlystopper,
                            dropout=dropout,
-                           dropout_steps=dropout_steps)
+                           dropout_steps=dropout_steps,
+                           decoder_sampling=decoder_sampling)
     return trainer
 
 
@@ -107,8 +110,10 @@ class Trainer(object):
                  n_gpu=1, gpu_rank=1, gpu_verbose_level=0,
                  report_manager=None, with_align=False, model_saver=None,
                  average_decay=0, average_every=1, model_dtype='fp32',
-                 earlystopper=None, dropout=[0.3], dropout_steps=[0]):
+                 earlystopper=None, dropout=[0.3], dropout_steps=[0],
+                 decoder_sampling=0.0):
         # Basic attributes.
+        self.decoder_sampling = decoder_sampling
         self.model = model
         self.train_loss = train_loss
         self.valid_loss = valid_loss
@@ -214,8 +219,8 @@ class Trainer(object):
         if valid_iter is None:
             logger.info('Start training loop without validation...')
         else:
-            logger.info('Start training loop and validate every %d steps...',
-                        valid_steps)
+            logger.info('Start training loop and validate every %d steps... [decoder_sampling=%f]',
+                        valid_steps, self.decoder_sampling)
 
         total_stats = onmt.utils.Statistics()
         report_stats = onmt.utils.Statistics()
@@ -252,20 +257,26 @@ class Trainer(object):
                 report_stats)
 
             if valid_iter is not None and step % valid_steps == 0:
-                if self.gpu_verbose_level > 0:
-                    logger.info('GpuRank %d: validate step %d'
-                                % (self.gpu_rank, step))
-                valid_stats = self.validate(
-                    valid_iter, moving_average=self.moving_average)
-                if self.gpu_verbose_level > 0:
-                    logger.info('GpuRank %d: gather valid stat \
-                                step %d' % (self.gpu_rank, step))
-                valid_stats = self._maybe_gather_stats(valid_stats)
-                if self.gpu_verbose_level > 0:
-                    logger.info('GpuRank %d: report stat step %d'
-                                % (self.gpu_rank, step))
-                self._report_step(self.optim.learning_rate(),
-                                  step, valid_stats=valid_stats)
+                def _validate(decoder_sampling):
+                    logger.info("Running validation with decoder_sampling=%f" % decoder_sampling)
+                    if self.gpu_verbose_level > 0:
+                        logger.info('GpuRank %d: validate step %d'
+                                    % (self.gpu_rank, step))
+                    valid_stats = self.validate(
+                        valid_iter, moving_average=self.moving_average,
+                        decoder_sampling=decoder_sampling)
+                    if self.gpu_verbose_level > 0:
+                        logger.info('GpuRank %d: gather valid stat \
+                                    step %d' % (self.gpu_rank, step))
+                    valid_stats = self._maybe_gather_stats(valid_stats)
+                    if self.gpu_verbose_level > 0:
+                        logger.info('GpuRank %d: report stat step %d'
+                                    % (self.gpu_rank, step))
+                    self._report_step(self.optim.learning_rate(),
+                                      step, valid_stats=valid_stats)
+                    return valid_stats
+                # _ = _validate(self.decoder_sampling)
+                valid_stats = _validate(0.0)
                 # Run patience mechanism
                 if self.earlystopper is not None:
                     self.earlystopper(valid_stats, step)
@@ -285,7 +296,7 @@ class Trainer(object):
             self.model_saver.save(step, moving_average=self.moving_average)
         return total_stats
 
-    def validate(self, valid_iter, moving_average=None):
+    def validate(self, valid_iter, moving_average=None, decoder_sampling=0.0):
         """ Validate model.
             valid_iter: validate data iterator
         Returns:
@@ -315,8 +326,10 @@ class Trainer(object):
 
                 with torch.cuda.amp.autocast(enabled=self.optim.amp):
                     # F-prop through the model.
-                    outputs, attns = valid_model(src, tgt, src_lengths,
-                                                 with_align=self.with_align)
+                    valid_model.decoder._loss = self.valid_loss
+                    valid_model.decoder._batch = batch
+                    valid_model.decoder._decoder_sampling = decoder_sampling
+                    outputs, attns = valid_model(src, tgt, src_lengths)
 
                     # Compute loss.
                     _, batch_stats = self.valid_loss(batch, outputs, attns)
@@ -361,6 +374,13 @@ class Trainer(object):
                 # 2. F-prop all but generator.
                 if self.accum_count == 1:
                     self.optim.zero_grad()
+
+                # EXPERIMENTAL
+                self.model.decoder._loss = self.train_loss
+                self.model.decoder._batch = batch
+                self.model.decoder._decoder_sampling = self.decoder_sampling
+                outputs, attns = self.model(src, tgt, src_lengths, bptt=bptt)
+                bptt = True
 
                 with torch.cuda.amp.autocast(enabled=self.optim.amp):
                     outputs, attns = self.model(

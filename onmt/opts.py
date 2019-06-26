@@ -274,6 +274,7 @@ def model_opts(parser):
               help="Feed the context vector at each time step as "
                    "additional input (via concatenation with the word "
                    "embeddings) to the decoder.")
+    group.add("--decoder_sampling", "-decoder_sampling", type=float, default=0.0)
     group.add('--bridge', '-bridge', action="store_true",
               help="Have an additional layer between the last encoder "
                    "state and the first decoder state")

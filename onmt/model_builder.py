@@ -74,6 +74,8 @@ def build_decoder(opt, embeddings):
     """
     dec_type = "ifrnn" if opt.decoder_type == "rnn" and opt.input_feed \
                else opt.decoder_type
+
+    assert dec_type == "ifrnn", "this branch is implementing sampling decoder which requires input feed RNN decoder"
     return str2dec[dec_type].from_opt(opt, embeddings)
 
 

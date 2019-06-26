@@ -361,9 +361,22 @@ class InputFeedRNNDecoder(RNNDecoderBase):
         See StdRNNDecoder._run_forward_pass() for description
         of arguments and return values.
         """
+
+        """
+         tgt (LongTensor): a sequence of input tokens tensors
+                ``(len, batch, nfeats)``.
+            memory_bank (FloatTensor): output(tensor sequence) from the
+                encoder RNN of size ``(src_len, batch, hidden_size)``.
+            memory_lengths (LongTensor): the source memory_bank lengths.
+        """
+        assert hasattr(self, "_decoder_sampling"), "This branch is implementing sampling decoder which requires to set _decoder_sampling parameter"
+        sample_prob = self._decoder_sampling 
+
         # Additional args check.
         input_feed = self.state["input_feed"].squeeze(0)
         input_feed_batch, _ = input_feed.size()
+        assert hasattr(self, "_loss"), "This branch is implementing sampling decoder which requires to set `loss` as a parameter of the decoder"
+        assert hasattr(self, "_batch"), "This branch is implementing sampling decoder which requires to set `batch` as a parameter of the decoder"
         _, tgt_batch, _ = tgt.size()
         aeq(tgt_batch, input_feed_batch)
         # END Additional args check.
@@ -377,8 +390,8 @@ class InputFeedRNNDecoder(RNNDecoderBase):
         if self._coverage:
             attns["coverage"] = []
 
-        emb = self.embeddings(tgt)
-        assert emb.dim() == 3  # len x batch x embedding_dim
+        # emb = self.embeddings(tgt)
+        # assert emb.dim() == 3  # len x batch x embedding_dim
 
         dec_state = self.state["hidden"]
         coverage = self.state["coverage"].squeeze(0) \
@@ -386,7 +399,9 @@ class InputFeedRNNDecoder(RNNDecoderBase):
 
         # Input feed concatenates hidden state with
         # input at every time step.
-        for emb_t in emb.split(1):
+        inp_t = tgt[0:1, :, :]
+        for i in range(tgt.size(0)):
+            emb_t = self.embeddings(inp_t)
             decoder_input = torch.cat([emb_t.squeeze(0), input_feed], 1)
             rnn_output, dec_state = self.rnn(decoder_input, dec_state)
             if self.attentional:
@@ -419,6 +434,36 @@ class InputFeedRNNDecoder(RNNDecoderBase):
                 attns["copy"] += [copy_attn]
             elif self._reuse_copy_attn:
                 attns["copy"] = attns["std"]
+           
+            if (i+1) < tgt.size(0):
+                _output = torch.stack(dec_outs[-1:])
+                _copy_attn = torch.stack(attns["copy"][-1:])
+                _loss = self._loss
+                _batch = self._batch
+                _scores = _loss.generator(
+                    _loss._bottle(_output), _loss._bottle(_copy_attn), _batch.src_map)
+                from onmt.modules.copy_generator import collapse_copy_scores
+                scores_data = collapse_copy_scores(
+                    _loss._unbottle(_scores, _batch.batch_size),
+                    _batch, _loss.tgt_vocab, None)
+                # print(scores_data.size())
+                
+                # restricting scores to vocab_size (it include cvocab otherwise)
+                scores_data = scores_data[:, :, :len(_loss.tgt_vocab)]
+
+                scores_data = _loss._bottle(scores_data)
+                # print(_loss.tgt_vocab)
+                sampled = torch.multinomial(scores_data, 1).to(tgt.device)
+                # print(sampled.max().values)
+                sampled_prob = torch.rand(sampled.size()).to(tgt.device)
+                sampled_selected = (sampled_prob < sample_prob).long()
+
+                bottled_tgt = _loss._bottle(tgt[i+1:i+2, :, :])
+                # print("bottled_tgt: ", bottled_tgt.size())
+                # print("sampled: ", sampled.size())
+                # print("sampled_selected: ", sampled_selected.size())
+                inp_t = sampled * sampled_selected + bottled_tgt * (1-sampled_selected)
+                inp_t = _loss._unbottle(inp_t, _batch.batch_size)
 
         return dec_state, dec_outs, attns
 
