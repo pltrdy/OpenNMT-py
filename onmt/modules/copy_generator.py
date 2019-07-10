@@ -16,17 +16,23 @@ def collapse_copy_scores(scores, batch, tgt_vocab, src_vocabs=None,
         ts = list(t.size())
         assert ts == sizes, "[%s] != [%s]" % (", ".join([str(_) for _ in ts]), ", ".join([str(_) for _ in sizes]))
     verbose = False
-    experimental = False
+    experimental = True and False
+    no_clone = True
     if experimental:
         src = batch.src[0]
         # print("src ", src.size())
         src_len = src.size(0)
         offset = len(tgt_vocab)
-        _src_map = batch.src_map.float().data.cuda()
-        _scores = scores.data.clone()
+        
+        if no_clone:
+            _src_map = batch.src_map
+            _scores = scores
+            _src = src
+        else:
+            _src_map = batch.src_map.float().data.cuda()
+            _scores = scores.data.clone()
+            _src = src.clone().data
 
-        # print("src_map ", _src_map.size())
-        _src = src.clone().data
         src_l, bs, c_vocab = _src_map.size()
         assert src_l == src_len
 
@@ -54,10 +60,10 @@ def collapse_copy_scores(scores, batch, tgt_vocab, src_vocabs=None,
                                              .bmm(_src_map.transpose(0, 1)
                                                           .transpose(1, 2))
         # [bs x src_len], invoc src tokens, or 1 (=pad)
-        # print("_src ", _src.size())
-        # print("src_invoc_mask ", src_invoc_mask.size())
-        src_token_invoc = _src.clone().squeeze(2).transpose(0,1)
-        # print("src_token_invoc ", src_token_invoc.size())
+        if no_clone:
+            src_token_invoc = _src.squeeze(2).transpose(0,1)
+        else:
+            src_token_invoc = _src.clone().squeeze(2).transpose(0,1)
         src_token_invoc.masked_fill_(1-src_invoc_mask.byte(), 1)
 
         if verbose:
