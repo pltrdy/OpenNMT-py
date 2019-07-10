@@ -375,6 +375,12 @@ def train_opts(parser):
     group.add('--reset_optim', '-reset_optim', default='none',
               choices=['none', 'all', 'states', 'keep_states'],
               help="Optimization resetter when train_from.")
+    group.add("--freeze_last_decoder_layer", "-freeze_last_decoder_layer",
+              action="store_true")
+    group.add("--freeze_generator", "-freeze_generator",
+              action="store_true")
+    group.add("--reset_first_decoder_layer", "-reset_first_decoder_layer",
+              action="store_true")
 
     # Pretrained word vectors
     group.add('--pre_word_vecs_enc', '-pre_word_vecs_enc',

@@ -19,6 +19,15 @@ from onmt.utils.misc import use_gpu
 from onmt.utils.logging import logger
 from onmt.utils.parse import ArgumentParser
 
+def initialize_model(model, model_opt):
+        if model_opt.param_init != 0.0:
+            for p in model.parameters():
+                p.data.uniform_(-model_opt.param_init, model_opt.param_init)
+        if model_opt.param_init_glorot:
+            for p in model.parameters():
+                if p.dim() > 1:
+                    xavier_uniform_(p)
+
 
 def build_embeddings(opt, text_field, for_encoder=True):
     """
@@ -228,8 +237,22 @@ def build_base_model(model_opt, fields, gpu, checkpoint=None, gpu_id=None):
     return model
 
 
+def freeze_module(module):
+    for param in module.parameters():
+        param.requires_grad = False
+
+
 def build_model(model_opt, opt, fields, checkpoint):
     logger.info('Building model...')
     model = build_base_model(model_opt, fields, use_gpu(opt), checkpoint)
+    if model_opt.freeze_last_decoder_layer or opt.freeze_last_decoder_layer:
+        last_layer = model.decoder.rnn.layers[-1]
+        freeze_module(last_layer)
+    if model_opt.freeze_generator or opt.freeze_generator:
+        generator = model.generator
+        freeze_module(generator)
+    if opt.reset_first_decoder_layer or (hasattr(model_opt, "reset_first_decoder_layer") and model_opt.reset_first_decoder_layer):
+        layer = last_layer = model.decoder.rnn.layers[0]
+        initialize_model(layer, model_opt)
     logger.info(model)
     return model
