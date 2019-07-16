@@ -247,6 +247,9 @@ class CopyGeneratorLoss(nn.Module):
             align (LongTensor): ``(batch_size x tgt_len)``
             target (LongTensor): ``(batch_size x tgt_len)``
         """
+        # pltrdy: dunno why its needed
+
+        target = target.long()
         # probabilities assigned by the model to the gold targets
         vocab_probs = scores.gather(1, target.unsqueeze(1)).squeeze(1)
 
@@ -309,8 +312,8 @@ class CopyGeneratorLossCompute(NMTLossCompute):
             copy_attn: the copy attention value.
             align: the align info.
         """
-        target = target.view(-1)
-        align = align.view(-1)
+        target = target.view(-1).long()
+        align = align.view(-1).long()
         scores = self.generator(
             self._bottle(output), self._bottle(copy_attn), batch.src_map
         )

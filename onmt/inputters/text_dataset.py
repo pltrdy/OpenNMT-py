@@ -3,7 +3,7 @@ from functools import partial
 
 import six
 import torch
-from torchtext.data import Field, RawField
+from torchtext.data import Field, RawField, Pipeline
 
 from onmt.inputters.datareader_base import DataReaderBase
 
@@ -44,7 +44,7 @@ def text_sort_key(ex):
 
 # mix this with partial
 def _feature_tokenize(
-        string, layer=0, tok_delim=None, feat_delim=None, truncate=None):
+        string, layer=0, tok_delim=None, feat_delim=None, truncate=None, msg=""):
     """Split apart word features (like POS/NER tags) from the tokens.
 
     Args:
@@ -60,7 +60,7 @@ def _feature_tokenize(
     Returns:
         List[str] of tokens.
     """
-
+    print(msg, end="")
     tokens = string.split(tok_delim)
     if truncate is not None:
         tokens = tokens[:truncate]
@@ -123,9 +123,11 @@ class TextMultiField(RawField):
             # lengths: batch_size
             base_data, lengths = base_data
 
-        feats = [ff.process(batch_by_feat[i], device=device)
+        feats = [ff.process(batch_by_feat[i], device=device).transpose(0,1)
                  for i, (_, ff) in enumerate(self.fields[1:], 1)]
-        levels = [base_data] + feats
+        # print(base_data.size())
+        # print([f.size() for f in feats])
+        levels = [base_data.float()] + feats
         # data: seq_len x batch_size x len(self.fields)
         data = torch.stack(levels, 2)
         if self.base_field.include_lengths:
@@ -151,6 +153,9 @@ class TextMultiField(RawField):
         return self.fields[item]
 
 
+def float_pipeline(values, *args):
+    
+    return [float(_) for _ in values]
 def text_fields(**kwargs):
     """Create text fields.
 
@@ -162,6 +167,7 @@ def text_fields(**kwargs):
         bos (str or NoneType, optional): Defaults to ``"<s>"``.
         eos (str or NoneType, optional): Defaults to ``"</s>"``.
         truncate (bool or NoneType, optional): Defaults to ``None``.
+        field_type
 
     Returns:
         TextMultiField
@@ -174,20 +180,39 @@ def text_fields(**kwargs):
     bos = kwargs.get("bos", "<s>")
     eos = kwargs.get("eos", "</s>")
     truncate = kwargs.get("truncate", None)
+    feat_type = kwargs.get("feat_type", "label")
     fields_ = []
     feat_delim = u"￨" if n_feats > 0 else None
     for i in range(n_feats + 1):
         name = base_name + "_feat_" + str(i - 1) if i > 0 else base_name
-        tokenize = partial(
-            _feature_tokenize,
-            layer=i,
-            truncate=truncate,
-            feat_delim=feat_delim)
-        use_len = i == 0 and include_lengths
-        feat = Field(
-            init_token=bos, eos_token=eos,
-            pad_token=pad, tokenize=tokenize,
-            include_lengths=use_len)
+        if i > 0 and feat_type == "float":
+            print("float feat %s " % name)
+            tokenize = partial(
+                _feature_tokenize,
+                layer=i,
+                truncate=truncate,
+                feat_delim=feat_delim,
+                msg=" ")
+            feat = Field(
+                sequential=True,
+                use_vocab=False,
+                dtype=torch.float32,
+                batch_first=True,
+                postprocessing=Pipeline(float_pipeline),
+                tokenize=tokenize,
+                pad_token="0.0"
+                )
+        else:
+            tokenize = partial(
+                _feature_tokenize,
+                layer=i,
+                truncate=truncate,
+                feat_delim=feat_delim)
+            use_len = i == 0 and include_lengths
+            feat = Field(
+                init_token=bos, eos_token=eos,
+                pad_token=pad, tokenize=tokenize,
+                include_lengths=use_len)
         fields_.append((name, feat))
     assert fields_[0][0] == base_name  # sanity check
     field = TextMultiField(fields_[0][0], fields_[0][1], fields_[1:])

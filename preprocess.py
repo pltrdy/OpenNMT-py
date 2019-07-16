@@ -189,7 +189,8 @@ def main(opt):
         tgt_nfeats,
         dynamic_dict=opt.dynamic_dict,
         src_truncate=opt.src_seq_length_trunc,
-        tgt_truncate=opt.tgt_seq_length_trunc)
+        tgt_truncate=opt.tgt_seq_length_trunc,
+        feat_type=opt.feat_type)
 
     src_reader = inputters.str2reader[opt.data_type].from_opt(opt)
     tgt_reader = inputters.str2reader["text"].from_opt(opt)

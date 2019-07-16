@@ -63,8 +63,18 @@ class RNNEncoder(EncoderBase):
     def forward(self, src, lengths=None):
         """See :func:`EncoderBase.forward()`"""
         self._check_args(src, lengths)
-
-        emb = self.embeddings(src)
+    
+        import torch
+        # print(src)
+        # print(src.size())
+        _src = src[:, :, 0:1]
+        _feats = src[:, :, 1:]
+        # print(_src.size())
+        _emb = self.embeddings(src.long())
+        # print(_emb.size())
+        emb = torch.cat([_emb[:, :, :self.embeddings.word_vec_size], _feats], dim=2)
+        # print(_emb.size())
+        # print(emb.size())
         # s_len, batch, emb_dim = emb.size()
 
         packed_emb = emb

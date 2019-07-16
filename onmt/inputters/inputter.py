@@ -67,7 +67,8 @@ def get_fields(
     eos='</s>',
     dynamic_dict=False,
     src_truncate=None,
-    tgt_truncate=None
+    tgt_truncate=None,
+    feat_type="label"
 ):
     """
     Args:
@@ -109,7 +110,8 @@ def get_fields(
                         "include_lengths": True,
                         "pad": pad, "bos": None, "eos": None,
                         "truncate": src_truncate,
-                        "base_name": "src"}
+                        "base_name": "src",
+                        "feat_type": feat_type}
     fields["src"] = fields_getters[src_data_type](**src_field_kwargs)
 
     tgt_field_kwargs = {"n_feats": n_tgt_feats,
@@ -602,6 +604,8 @@ class OrderedIterator(torchtext.data.Iterator):
                 if self.yield_raw_example:
                     yield minibatch[0]
                 else:
+                    # print(minibatch[0].src)
+                    # print(minibatch[0].tgt)
                     yield torchtext.data.Batch(
                         minibatch,
                         self.dataset,

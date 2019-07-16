@@ -47,6 +47,9 @@ def model_opts(parser):
               choices=['concat', 'sum', 'mlp'],
               help="Merge action for incorporating features embeddings. "
                    "Options [concat|sum|mlp].")
+    group.add("--feat_repr", "-feat_repr", type=str, default="embeddings",
+              choices=["embeddings", "float"],
+              help="Representation of features")
     group.add('--feat_vec_size', '-feat_vec_size', type=int, default=-1,
               help="If specified, feature embedding sizes "
                    "will be set to this. Otherwise, feat_vec_exponent "
@@ -194,7 +197,9 @@ def preprocess_opts(parser):
     group.add('--data_type', '-data_type', default="text",
               help="Type of the source input. "
                    "Options are [text|img|audio|vec].")
-
+    group.add("--feat_type", "-feat_type", default="label",
+              choices=["label", "float"],
+              help="Data type of features, either label or float")
     group.add('--train_src', '-train_src', required=True, nargs='+',
               help="Path(s) to the training source data")
     group.add('--train_tgt', '-train_tgt', required=True, nargs='+',

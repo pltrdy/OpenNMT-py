@@ -51,6 +51,7 @@ def build_embeddings(opt, text_field, for_encoder=True):
     word_padding_idx, feat_pad_indices = pad_indices[0], pad_indices[1:]
 
     num_embs = [len(f.vocab) for _, f in text_field]
+    num_embs[1:] = [_*0+2 for _ in num_embs[1:]]
     num_word_embeddings, num_feat_embeddings = num_embs[0], num_embs[1:]
 
     fix_word_vecs = opt.fix_word_vecs_enc if for_encoder \

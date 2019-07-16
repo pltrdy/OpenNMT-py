@@ -274,6 +274,8 @@ class Embeddings(nn.Module):
                 else:
                     source = module(source)
         else:
+            # _source = self.make_embedding(source[:, :, 0:1].long())
+            # source = torch.cat([_source, source[:, :, 1:]], dim=2)
             source = self.make_embedding(source)
 
         return source

@@ -376,7 +376,9 @@ class InputFeedRNNDecoder(RNNDecoderBase):
         if self._coverage:
             attns["coverage"] = []
 
-        emb = self.embeddings(tgt)
+        # print(tgt)
+        # print(tgt.size())
+        emb = self.embeddings(tgt.long())
         assert emb.dim() == 3  # len x batch x embedding_dim
 
         dec_state = self.state["hidden"]
