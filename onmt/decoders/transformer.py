@@ -44,7 +44,7 @@ class TransformerDecoderLayer(nn.Module):
         self.drop = nn.Dropout(dropout)
 
     def forward(self, inputs, memory_bank, src_pad_mask, tgt_pad_mask,
-                layer_cache=None, step=None):
+                layer_cache=None, step=None, return_coverage=False):
         """
         Args:
             inputs (FloatTensor): ``(batch_size, 1, model_dim)``
@@ -83,13 +83,18 @@ class TransformerDecoderLayer(nn.Module):
         query = self.drop(query) + inputs
 
         query_norm = self.layer_norm_2(query)
-        mid, attn = self.context_attn(memory_bank, memory_bank, query_norm,
+        mid, attn, all_attns = self.context_attn(memory_bank, memory_bank, query_norm,
                                       mask=src_pad_mask,
                                       layer_cache=layer_cache,
-                                      attn_type="context")
+                                      attn_type="context",
+                                      return_all_attentions=return_coverage)
         output = self.feed_forward(self.drop(mid) + query)
-
-        return output, attn
+        if not return_coverage:
+            return output, attn
+        # raise ValueError(attn.size(), all_attns.size())
+        coverage_attn = all_attns.sum(1)
+        assert attn.size() == coverage_attn.size()
+        return output, attn, coverage_attn
 
     def update_dropout(self, dropout):
         self.self_attn.update_dropout(dropout)
@@ -209,21 +214,30 @@ class TransformerDecoder(DecoderBase):
         for i, layer in enumerate(self.transformer_layers):
             layer_cache = self.state["cache"]["layer_{}".format(i)] \
                 if step is not None else None
-            output, attn = layer(
+            output, attn, coverage = layer(
                 output,
                 src_memory_bank,
                 src_pad_mask,
                 tgt_pad_mask,
                 layer_cache=layer_cache,
-                step=step)
+                step=step,
+                return_coverage=True)
 
         output = self.layer_norm(output)
         dec_outs = output.transpose(0, 1).contiguous()
         attn = attn.transpose(0, 1).contiguous()
+        coverage = coverage.transpose(0, 1).contiguous()
+        assert attn.size() == coverage.size(), "%s != %s" % (str(attn.size()), str(coverage.size()))
 
         attns = {"std": attn}
         if self._copy:
             attns["copy"] = attn
+
+        #TODO set as flag
+       
+        coverage_attn = True
+        if coverage_attn:
+            attns["coverage"] = coverage
 
         # TODO change the way attns is returned dict => list or tuple (onnx)
         return dec_outs, attns

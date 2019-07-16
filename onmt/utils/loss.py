@@ -262,12 +262,16 @@ class NMTLossCompute(LossComputeBase):
         if self.lambda_coverage != 0.0:
             coverage_loss = self._compute_coverage_loss(
                 std_attn=std_attn, coverage_attn=coverage_attn)
-            loss += coverage_loss
+            try:
+                loss += coverage_loss
+            except:
+                raise ValueError(loss.size(), coverage_loss.size())
         stats = self._stats(loss.clone(), scores, gtruth)
 
         return loss, stats
 
     def _compute_coverage_loss(self, std_attn, coverage_attn):
+        # raise ValueError(type(coverage_attn), str(coverage_attn.size()), std_attn.size())
         covloss = torch.min(std_attn, coverage_attn).sum(2).view(-1)
         covloss *= self.lambda_coverage
         return covloss
