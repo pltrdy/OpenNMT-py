@@ -287,23 +287,89 @@ class TransformerDecoder(DecoderBase):
         self.state["src"] = self.state["src"].detach()
 
     def forward(self, tgt, memory_bank, step=None, **kwargs):
-        """Decode, possibly stepwise."""
+        """Decode, possibly stepwise.
+           
+           Experimental: it implements parallel sampling of 
+            [Duckworth 2019](https://arxiv.org/abs/1906.04331)
+           Along with variants:
+                parallel_sampling_mode="duckworth"
+                parallel_sampling_mode=""
+
+        """
         if step == 0:
             self._init_cache(memory_bank)
 
         tgt_words = tgt[:, :, 0].transpose(0, 1)
 
         emb = self.embeddings(tgt, step=step)
-        assert emb.dim() == 3  # len x batch x embedding_dim
 
-        output = emb.transpose(0, 1).contiguous()
-        src_memory_bank = memory_bank.transpose(0, 1).contiguous()
+        decoder_sampling_k = self._parallel_sampling_k
+        sample_prob = self._decoder_sampling
+        if self._decoder_sampling != 0.0 and self._parallel_sampling_k == 0:
+            raise ValueError("parallel_sampling_k can't be 0 w/ decoder_sampling != 0.0 (%f)" % self._decoder_sampling)
 
-        pad_idx = self.embeddings.word_padding_idx
-        src_lens = kwargs["memory_lengths"]
-        src_max_len = self.state["src"].shape[0]
-        src_pad_mask = ~sequence_mask(src_lens, src_max_len).unsqueeze(1)
-        tgt_pad_mask = tgt_words.data.eq(pad_idx).unsqueeze(1)  # [B, 1, T_tgt]
+
+        while True:
+            assert emb.dim() == 3  # len x batch x embedding_dim
+
+            output = emb.transpose(0, 1).contiguous()
+            src_memory_bank = memory_bank.transpose(0, 1).contiguous()
+
+            pad_idx = self.embeddings.word_padding_idx
+            src_lens = kwargs["memory_lengths"]
+            src_max_len = self.state["src"].shape[0]
+            src_pad_mask = ~sequence_mask(src_lens, src_max_len).unsqueeze(1)
+            tgt_pad_mask = tgt_words.data.eq(pad_idx).unsqueeze(1)  # [B, 1, T_tgt]
+
+            for i, layer in enumerate(self.transformer_layers):
+                layer_cache = self.state["cache"]["layer_{}".format(i)] \
+                    if step is not None else None
+                output, attn = layer(
+                    output,
+                    src_memory_bank,
+                    src_pad_mask,
+                    tgt_pad_mask,
+                    layer_cache=layer_cache,
+                    step=step)
+
+            output = self.layer_norm(output)
+            dec_outs = output.transpose(0, 1).contiguous()
+            attn = attn.transpose(0, 1).contiguous()
+
+            attns = {"std": attn}
+            if self._copy:
+                attns["copy"] = attn
+
+            if self._decoder_sampling == 0.0 or decoder_sampling_k == 0:
+                break
+            else:
+                decoder_sampling_k -= 1
+
+                _output = output
+                _copy_attn = attn
+                _loss = self._loss
+                _batch = self._batch
+                import onmt
+                if isinstance(_loss.generator, onmt.modules.CopyGenerator):
+                    _scores = _loss.generator(
+                        _loss._bottle(_output), _loss._bottle(_copy_attn), _batch.src_map)
+                    from onmt.modules.copy_generator import collapse_copy_scores
+                    scores_data = collapse_copy_scores(
+                        _loss._unbottle(_scores, _batch.batch_size),
+                        _batch, _loss.tgt_vocab, None)
+                    scores_data = scores_data[:, :, :len(_loss.tgt_vocab)]
+                else:
+                    _scores = _loss.generator(
+                        _loss._bottle(_output))
+                    scores_data = torch.exp(_loss._unbottle(_scores, _batch.batch_size))
+                scores_data = _loss._bottle(scores_data)
+                sampled = torch.multinomial(scores_data, 1).to(tgt.device)
+                sampled_prob = torch.rand(sampled.size()).to(tgt.device)
+                sampled_selected = (sampled_prob < sample_prob).long()
+                bottled_tgt = _loss._bottle(tgt[:, :, :])
+                inp_t = sampled * sampled_selected + bottled_tgt * (1-sampled_selected)
+                inp_t = _loss._unbottle(inp_t, _batch.batch_size)
+                emb = self.embeddings(inp_t, step=step)
 
         with_align = kwargs.pop('with_align', False)
         attn_aligns = []

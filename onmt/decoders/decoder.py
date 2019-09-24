@@ -192,6 +192,7 @@ class RNNDecoderBase(DecoderBase):
 
     def forward(self, tgt, memory_bank, memory_lengths=None, step=None,
                 **kwargs):
+    def forward(self, tgt, memory_bank, memory_lengths=None, step=None, **kwargs):
         """
         Args:
             tgt (LongTensor): sequences of padded tokens

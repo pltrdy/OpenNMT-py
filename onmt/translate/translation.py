@@ -50,7 +50,12 @@ class TranslationBuilder(object):
             if tok < len(vocab):
                 tokens.append(vocab.itos[tok])
             else:
+                src_token_id = tok - len(vocab)
+                src_token = src_vocab.itos[src_token_id]
+                print("COPY OOV?! itok: %d, itoksrc: %d, voc: %d, srcvoc: %d, tok: %s"
+                      % (tok, src_token_id, len(vocab), len(src_vocab), src_token))
                 tokens.append(src_vocab.itos[tok - len(vocab)])
+                
             if tokens[-1] == tgt_field.eos_token:
                 tokens = tokens[:-1]
                 break

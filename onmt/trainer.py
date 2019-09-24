@@ -58,6 +58,7 @@ def build_trainer(opt, device_id, model, fields, optim, model_saver=None):
         if opt.early_stopping > 0 else None
 
     decoder_sampling = getattr(opt, "decoder_sampling", 0.0)
+    parallel_sampling_k = getattr(opt, "parallel_sampling_k", 0)
 
     report_manager = onmt.utils.build_report_manager(opt)
     trainer = onmt.Trainer(model, train_loss, valid_loss, optim, trunc_size,
@@ -73,7 +74,8 @@ def build_trainer(opt, device_id, model, fields, optim, model_saver=None):
                            earlystopper=earlystopper,
                            dropout=dropout,
                            dropout_steps=dropout_steps,
-                           decoder_sampling=decoder_sampling)
+                           decoder_sampling=decoder_sampling,
+                           parallel_sampling_k=parallel_sampling_k)
     return trainer
 
 
@@ -111,9 +113,11 @@ class Trainer(object):
                  report_manager=None, with_align=False, model_saver=None,
                  average_decay=0, average_every=1, model_dtype='fp32',
                  earlystopper=None, dropout=[0.3], dropout_steps=[0],
-                 decoder_sampling=0.0):
+                 decoder_sampling=0.0,
+                 parallel_sampling_k=0):
         # Basic attributes.
         self.decoder_sampling = decoder_sampling
+        self.parallel_sampling_k = parallel_sampling_k
         self.model = model
         self.train_loss = train_loss
         self.valid_loss = valid_loss
@@ -375,10 +379,12 @@ class Trainer(object):
                 if self.accum_count == 1:
                     self.optim.zero_grad()
 
-                # EXPERIMENTAL
+                # EXPERIMENTAL DECODER SAMPLING
                 self.model.decoder._loss = self.train_loss
                 self.model.decoder._batch = batch
                 self.model.decoder._decoder_sampling = self.decoder_sampling
+                self.model.decoder._parallel_sampling_k = 1
+
                 outputs, attns = self.model(src, tgt, src_lengths, bptt=bptt)
                 bptt = True
 
