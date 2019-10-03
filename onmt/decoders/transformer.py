@@ -300,8 +300,10 @@ class TransformerDecoder(DecoderBase):
             self._init_cache(memory_bank)
 
         tgt_words = tgt[:, :, 0].transpose(0, 1)
+        # print("tgt words: ", tgt_words.size(), "\n", tgt_words)
 
-        emb = self.embeddings(tgt, step=step)
+        # emb = self.embeddings(tgt, step=step)
+        inp_t = tgt
 
         decoder_sampling_k = self._parallel_sampling_k
         sample_prob = self._decoder_sampling
@@ -310,6 +312,7 @@ class TransformerDecoder(DecoderBase):
 
 
         while True:
+            emb = self.embeddings(inp_t, step=step)
             assert emb.dim() == 3  # len x batch x embedding_dim
 
             output = emb.transpose(0, 1).contiguous()
@@ -367,9 +370,25 @@ class TransformerDecoder(DecoderBase):
                 sampled_prob = torch.rand(sampled.size()).to(tgt.device)
                 sampled_selected = (sampled_prob < sample_prob).long()
                 bottled_tgt = _loss._bottle(tgt[:, :, :])
-                inp_t = sampled * sampled_selected + bottled_tgt * (1-sampled_selected)
-                inp_t = _loss._unbottle(inp_t, _batch.batch_size)
-                emb = self.embeddings(inp_t, step=step)
+                # inp_t = sampled * sampled_selected + bottled_tgt * (1-sampled_selected)
+                # inp_t = _loss._unbottle(inp_t, _batch.batch_size)
+                # emb = self.embeddings(inp_t, step=step)
+                pred_t = sampled * sampled_selected + bottled_tgt * (1-sampled_selected)
+                pred_t = _loss._unbottle(pred_t, _batch.batch_size)
+                # print("pred_t size: ", pred_t.size())
+                # print("inp_t size: ", inp_t.size())
+
+                # shift predictions to get next input 
+                # i.e. put <bos> back and remove <eos>
+                inp_t = torch.cat([inp_t[0:1], pred_t[:-1]], dim=0)
+                # print("inp_t size: ", inp_t.size())
+                # print(inp_t.squeeze().t())
+                # # emb = self.embeddings(inp_t, step=step)
+                # 
+                # print("decoder_sampling_k: %d" % decoder_sampling_k)
+                # inp_t = inp_t.squeeze()
+                # print(inp_t.size())
+                # print(inp_t)
 
         with_align = kwargs.pop('with_align', False)
         attn_aligns = []
