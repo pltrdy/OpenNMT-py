@@ -58,6 +58,7 @@ def build_trainer(opt, device_id, model, fields, optim, model_saver=None):
         if opt.early_stopping > 0 else None
 
     decoder_sampling = getattr(opt, "decoder_sampling", 0.0)
+    decoder_sampling_validation = getattr(opt, "decoder_sampling_validation", False)
     parallel_sampling_k = getattr(opt, "parallel_sampling_k", 0)
 
     report_manager = onmt.utils.build_report_manager(opt)
@@ -75,6 +76,7 @@ def build_trainer(opt, device_id, model, fields, optim, model_saver=None):
                            dropout=dropout,
                            dropout_steps=dropout_steps,
                            decoder_sampling=decoder_sampling,
+                           decoder_sampling_validation=decoder_sampling_validation,
                            parallel_sampling_k=parallel_sampling_k)
     return trainer
 
@@ -114,10 +116,13 @@ class Trainer(object):
                  average_decay=0, average_every=1, model_dtype='fp32',
                  earlystopper=None, dropout=[0.3], dropout_steps=[0],
                  decoder_sampling=0.0,
+                 decoder_sampling_validation=False,
                  parallel_sampling_k=0):
         # Basic attributes.
         self.decoder_sampling = decoder_sampling
+        self.decoder_sampling_validation = decoder_sampling_validation
         self.parallel_sampling_k = parallel_sampling_k
+
         self.model = model
         self.train_loss = train_loss
         self.valid_loss = valid_loss
@@ -279,7 +284,8 @@ class Trainer(object):
                     self._report_step(self.optim.learning_rate(),
                                       step, valid_stats=valid_stats)
                     return valid_stats
-                # _ = _validate(self.decoder_sampling)
+                if self.decoder_sampling_validation:
+                    _ = _validate(1.0)
                 valid_stats = _validate(0.0)
                 # Run patience mechanism
                 if self.earlystopper is not None:
@@ -333,6 +339,7 @@ class Trainer(object):
                     valid_model.decoder._loss = self.valid_loss
                     valid_model.decoder._batch = batch
                     valid_model.decoder._decoder_sampling = decoder_sampling
+                    valid_model.decoder._parallel_sampling_k = 5
                     outputs, attns = valid_model(src, tgt, src_lengths)
 
                     # Compute loss.
