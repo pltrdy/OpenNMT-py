@@ -304,14 +304,25 @@ class TransformerDecoder(DecoderBase):
 
         # emb = self.embeddings(tgt, step=step)
         inp_t = tgt
+        
 
-        decoder_sampling_k = self._parallel_sampling_k
         sample_prob = self._decoder_sampling
+        decoder_sampling_k = self._parallel_sampling_k
+       
+        # debug n inputs / n steps
+        dinputs = 10
+        dsteps = 5
+
+
         if self._decoder_sampling != 0.0 and self._parallel_sampling_k == 0:
             raise ValueError("parallel_sampling_k can't be 0 w/ decoder_sampling != 0.0 (%f)" % self._decoder_sampling)
 
 
         while True:
+            # print("decoder_sampling_k: %d/%d" % (decoder_sampling_k, self._parallel_sampling_k))
+            # print("inp_t: ", inp_t.size())
+            # print("[k=%d] begining" % decoder_sampling_k, inp_t[:dsteps, :dinputs])
+            # print("[k=%d] end" % decoder_sampling_k, inp_t[-dsteps:, :dinputs])
             emb = self.embeddings(inp_t, step=step)
             assert emb.dim() == 3  # len x batch x embedding_dim
 
@@ -365,22 +376,47 @@ class TransformerDecoder(DecoderBase):
                     _scores = _loss.generator(
                         _loss._bottle(_output))
                     scores_data = torch.exp(_loss._unbottle(_scores, _batch.batch_size))
+                
+                # we ignore last prediction scores (supposedly <eos>)
+                scores_data = scores_data[:-1, :, :]
                 scores_data = _loss._bottle(scores_data)
-                sampled = torch.multinomial(scores_data, 1).to(tgt.device)
-                sampled_prob = torch.rand(sampled.size()).to(tgt.device)
-                sampled_selected = (sampled_prob < sample_prob).long()
-                bottled_tgt = _loss._bottle(tgt[:, :, :])
-                # inp_t = sampled * sampled_selected + bottled_tgt * (1-sampled_selected)
-                # inp_t = _loss._unbottle(inp_t, _batch.batch_size)
-                # emb = self.embeddings(inp_t, step=step)
-                pred_t = sampled * sampled_selected + bottled_tgt * (1-sampled_selected)
+                
+                pred_t = torch.multinomial(scores_data, 1).to(tgt.device)
+                # print("[k=%d] pred" % decoder_sampling_k, _loss._unbottle(pred_t, _batch.batch_size)[:dsteps, :dinputs])
+                pred_prob = torch.rand(pred_t.size()).to(tgt.device)
+                # print("sample prob: %f" % sample_prob)
+                # print(pred_prob)
+                pred_mask = (pred_prob < sample_prob).long()
+
+            
+                # we ignore first ref input for now (<bos>)
+                # print(tgt[:,:,0])
+                # print("tgt by step", tgt[0, :, 0])
+                # print("tgt by step", tgt[1, :, 0])
+                # print("tgt by step", tgt[2, :, 0])
+                # print("tgt by step", tgt[3, :, 0])
+                # print("tgt by step", tgt[4, :, 0])
+                # _tgt_no_bos = tgt[:, 1:, 0]
+                # print("[k=%d] tgt no bos" % decoder_sampling_k, _tgt_no_bos[:dsteps, :dinputs])
+                _tgt_no_bos = tgt[1:, :, 0]
+                # print("[k=%d] tgt no bos" % decoder_sampling_k, _tgt_no_bos[:dsteps, :dinputs])
+                bottled_tgt = _loss._bottle(tgt[1:, :, :])
+                pred_t = pred_t * pred_mask + bottled_tgt * (1-pred_mask)
                 pred_t = _loss._unbottle(pred_t, _batch.batch_size)
+
+                # print("[k=%d] ref inp" % decoder_sampling_k, _loss._unbottle(bottled_tgt, _batch.batch_size)[:dsteps, :dinputs])
+                # print("[k=%d] pred_mask" % decoder_sampling_k, _loss._unbottle(pred_mask, _batch.batch_size)[:dsteps, :dinputs])
+
+                # print("[k=%d] sampled pred" % decoder_sampling_k, pred_t.size())
+                # print("[k=%d] sampled pred" % decoder_sampling_k, pred_t[:dsteps, :dinputs])
                 # print("pred_t size: ", pred_t.size())
                 # print("inp_t size: ", inp_t.size())
 
                 # shift predictions to get next input 
                 # i.e. put <bos> back and remove <eos>
-                inp_t = torch.cat([inp_t[0:1], pred_t[:-1]], dim=0)
+                inp_t = torch.cat([inp_t[0:1], pred_t], dim=0)
+                # print("[k=%d] next inp" % decoder_sampling_k, inp_t.size())
+                # print("[k=%d] next inp" % decoder_sampling_k, inp_t[:dsteps, :dinputs])
                 # print("inp_t size: ", inp_t.size())
                 # print(inp_t.squeeze().t())
                 # # emb = self.embeddings(inp_t, step=step)
