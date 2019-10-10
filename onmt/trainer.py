@@ -58,6 +58,7 @@ def build_trainer(opt, device_id, model, fields, optim, model_saver=None):
         if opt.early_stopping > 0 else None
 
     decoder_sampling = getattr(opt, "decoder_sampling", 0.0)
+    decoder_sampling_greedy = getattr(opt, "decoder_sampling_greedy", False)
     decoder_sampling_validation = getattr(opt, "decoder_sampling_validation", 0)
     parallel_sampling_k = getattr(opt, "parallel_sampling_k", 0)
 
@@ -76,6 +77,7 @@ def build_trainer(opt, device_id, model, fields, optim, model_saver=None):
                            dropout=dropout,
                            dropout_steps=dropout_steps,
                            decoder_sampling=decoder_sampling,
+                           decoder_sampling_greedy=decoder_sampling_greedy,
                            decoder_sampling_validation=decoder_sampling_validation,
                            parallel_sampling_k=parallel_sampling_k)
     return trainer
@@ -116,10 +118,12 @@ class Trainer(object):
                  average_decay=0, average_every=1, model_dtype='fp32',
                  earlystopper=None, dropout=[0.3], dropout_steps=[0],
                  decoder_sampling=0.0,
+                 decoder_sampling_greedy=False,
                  decoder_sampling_validation=0,
                  parallel_sampling_k=0):
         # Basic attributes.
         self.decoder_sampling = decoder_sampling
+        self.decoder_sampling_greedy = decoder_sampling_greedy
         self.decoder_sampling_validation = decoder_sampling_validation
         self.parallel_sampling_k = parallel_sampling_k
 
@@ -340,6 +344,8 @@ class Trainer(object):
                     valid_model.decoder._batch = batch
                     valid_model.decoder._decoder_sampling = decoder_sampling
                     valid_model.decoder._parallel_sampling_k = self.decoder_sampling_validation
+                    valid_model.decoder._decoder_greedy = True
+
                     outputs, attns = valid_model(src, tgt, src_lengths)
 
                     # Compute loss.
@@ -390,7 +396,9 @@ class Trainer(object):
                 self.model.decoder._loss = self.train_loss
                 self.model.decoder._batch = batch
                 self.model.decoder._decoder_sampling = self.decoder_sampling
-                self.model.decoder._parallel_sampling_k = 1
+                self.model.decoder._parallel_sampling_k = self.parallel_sampling_k
+                self.model.decoder._decoder_greedy = self.decoder_sampling_greedy
+                
 
                 outputs, attns = self.model(src, tgt, src_lengths, bptt=bptt)
                 bptt = True
