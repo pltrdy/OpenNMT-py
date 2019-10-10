@@ -275,8 +275,8 @@ def model_opts(parser):
                    "additional input (via concatenation with the word "
                    "embeddings) to the decoder.")
     group.add("--decoder_sampling", "-decoder_sampling", type=float, default=0.0)
-    group.add("--decoder_sampling_validation", "-decoder_sampling_validation",
-              action="store_true")
+    group.add("--decoder_sampling_validation", "-decoder_sampling_validation",default=0,
+              type=int, help="Value of k for validation sampling (0=no sampling)")
     group.add("--parallel_sampling_k", "-parallel_sampling_k", type=int, default=0)
     group.add('--bridge', '-bridge', action="store_true",
               help="Have an additional layer between the last encoder "

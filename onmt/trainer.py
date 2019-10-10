@@ -58,7 +58,7 @@ def build_trainer(opt, device_id, model, fields, optim, model_saver=None):
         if opt.early_stopping > 0 else None
 
     decoder_sampling = getattr(opt, "decoder_sampling", 0.0)
-    decoder_sampling_validation = getattr(opt, "decoder_sampling_validation", False)
+    decoder_sampling_validation = getattr(opt, "decoder_sampling_validation", 0)
     parallel_sampling_k = getattr(opt, "parallel_sampling_k", 0)
 
     report_manager = onmt.utils.build_report_manager(opt)
@@ -116,7 +116,7 @@ class Trainer(object):
                  average_decay=0, average_every=1, model_dtype='fp32',
                  earlystopper=None, dropout=[0.3], dropout_steps=[0],
                  decoder_sampling=0.0,
-                 decoder_sampling_validation=False,
+                 decoder_sampling_validation=0,
                  parallel_sampling_k=0):
         # Basic attributes.
         self.decoder_sampling = decoder_sampling
@@ -284,7 +284,7 @@ class Trainer(object):
                     self._report_step(self.optim.learning_rate(),
                                       step, valid_stats=valid_stats)
                     return valid_stats
-                if self.decoder_sampling_validation:
+                if self.decoder_sampling_validation != 0:
                     _ = _validate(1.0)
                 valid_stats = _validate(0.0)
                 # Run patience mechanism
@@ -339,7 +339,7 @@ class Trainer(object):
                     valid_model.decoder._loss = self.valid_loss
                     valid_model.decoder._batch = batch
                     valid_model.decoder._decoder_sampling = decoder_sampling
-                    valid_model.decoder._parallel_sampling_k = 5
+                    valid_model.decoder._parallel_sampling_k = self.decoder_sampling_validation
                     outputs, attns = valid_model(src, tgt, src_lengths)
 
                     # Compute loss.
