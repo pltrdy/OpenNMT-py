@@ -384,7 +384,7 @@ class TransformerDecoder(DecoderBase):
                 if not self._decoder_greedy:
                     pred_t = torch.multinomial(scores_data, 1).to(tgt.device)
                 else:
-                    pred_t = (scores_data.max(dim=1)).indices.to(tgt.device)
+                    pred_t = (scores_data.max(dim=1)).indices.view(-1, 1).to(tgt.device)
                 # print("[k=%d] pred" % decoder_sampling_k, _loss._unbottle(pred_t, _batch.batch_size)[:dsteps, :dinputs])
                 pred_prob = torch.rand(pred_t.size()).to(tgt.device)
                 # print("sample prob: %f" % sample_prob)
