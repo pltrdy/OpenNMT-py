@@ -52,8 +52,8 @@ class TranslationBuilder(object):
             else:
                 src_token_id = tok - len(vocab)
                 src_token = src_vocab.itos[src_token_id]
-                print("COPY OOV?! itok: %d, itoksrc: %d, voc: %d, srcvoc: %d, tok: %s"
-                      % (tok, src_token_id, len(vocab), len(src_vocab), src_token))
+                # print("COPY OOV?! itok: %d, itoksrc: %d, voc: %d, srcvoc: %d, tok: %s"
+                #       % (tok, src_token_id, len(vocab), len(src_vocab), src_token))
                 tokens.append(src_vocab.itos[tok - len(vocab)])
                 
             if tokens[-1] == tgt_field.eos_token:

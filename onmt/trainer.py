@@ -287,7 +287,7 @@ class Trainer(object):
                                     % (self.gpu_rank, step))
                     self._report_step(self.optim.learning_rate(),
                                       step, valid_stats=valid_stats,
-                                      valid_name=name)
+                                      valid_name=valid_name)
                     return valid_stats
                 if self.decoder_sampling_validation != 0:
                     _ = _validate(1.0, valid_name="valid_sampling")

@@ -305,17 +305,17 @@ class TransformerDecoder(DecoderBase):
         # emb = self.embeddings(tgt, step=step)
         inp_t = tgt
         
-
-        sample_prob = self._decoder_sampling
-        decoder_sampling_k = self._parallel_sampling_k
+        
+        sample_prob = getattr(self, '_decoder_sampling', 0.0)
+        decoder_sampling_k = getattr(self, '_parallel_sampling_k', 1)
        
         # debug n inputs / n steps
         dinputs = 10
         dsteps = 5
 
 
-        if self._decoder_sampling != 0.0 and self._parallel_sampling_k == 0:
-            raise ValueError("parallel_sampling_k can't be 0 w/ decoder_sampling != 0.0 (%f)" % self._decoder_sampling)
+        if sample_prob != 0.0 and decoder_sampling_k == 0:
+            raise ValueError("parallel_sampling_k can't be 0 w/ decoder_sampling != 0.0 (%f)" % sample_prob)
 
 
         while True:
@@ -354,7 +354,7 @@ class TransformerDecoder(DecoderBase):
             if self._copy:
                 attns["copy"] = attn
 
-            if self._decoder_sampling == 0.0 or decoder_sampling_k == 0:
+            if sample_prob == 0.0 or decoder_sampling_k == 0:
                 break
             else:
                 decoder_sampling_k -= 1
