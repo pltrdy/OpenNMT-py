@@ -270,7 +270,7 @@ class Trainer(object):
                 report_stats)
 
             if valid_iter is not None and step % valid_steps == 0:
-                def _validate(decoder_sampling):
+                def _validate(decoder_sampling, valid_name="valid"):
                     logger.info("Running validation with decoder_sampling=%f" % decoder_sampling)
                     if self.gpu_verbose_level > 0:
                         logger.info('GpuRank %d: validate step %d'
@@ -286,10 +286,11 @@ class Trainer(object):
                         logger.info('GpuRank %d: report stat step %d'
                                     % (self.gpu_rank, step))
                     self._report_step(self.optim.learning_rate(),
-                                      step, valid_stats=valid_stats)
+                                      step, valid_stats=valid_stats,
+                                      valid_name=name)
                     return valid_stats
                 if self.decoder_sampling_validation != 0:
-                    _ = _validate(1.0)
+                    _ = _validate(1.0, valid_name="valid_sampling")
                 valid_stats = _validate(0.0)
                 # Run patience mechanism
                 if self.earlystopper is not None:
@@ -502,7 +503,7 @@ class Trainer(object):
                 multigpu=self.n_gpu > 1)
 
     def _report_step(self, learning_rate, step, train_stats=None,
-                     valid_stats=None):
+                     valid_stats=None, valid_name="valid"):
         """
         Simple function to report stats (if report_manager is set)
         see `onmt.utils.ReportManagerBase.report_step` for doc
