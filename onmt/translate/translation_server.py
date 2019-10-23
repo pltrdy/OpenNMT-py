@@ -6,6 +6,7 @@ import sys
 import os
 import time
 import json
+import multiprocessing 
 import threading
 import re
 import traceback
@@ -37,6 +38,64 @@ def critical(func):
         server_model.running_lock.release()
         return o
     return wrapper
+
+
+
+def is_raisable(ex):
+    """Return whether object `ex` is raisable or not
+    """
+    try:
+        raise Exception from ex
+    except TypeError:
+        return False
+    except:
+        return True
+
+
+class TimeoutFctException(Exception):
+    pass
+
+
+class TimeoutFct:
+    """Utility class to run function with a timeout
+       It's meant for synchronous run
+       i.e. calling `run` in parallel would lead to inconsistent results
+    """
+    def __init__(self, timeout=5):
+        self.timeout = timeout
+        self.queue = multiprocessing.Queue()
+
+    def run_target(self, *args, **kwargs):
+        try:
+            o = self.target(*args, **kwargs)
+            self.queue.put(o)
+        except:
+            t, v, tr = sys.exc_info()
+            self.queue.put(v)
+            raise v
+
+    def run(self, target, *args, **kwargs):
+        self.target = target
+        self.process = multiprocessing.Process(
+            target=self.run_target,
+            args=args,
+            kwargs=kwargs
+        )
+        timer = threading.Timer(self.timeout, self.cancel)
+        timer.start()
+        self.process.start()
+        self.process.join()
+        timer.cancel()
+    
+        o = self.queue.get()
+        if is_raisable(o):
+            raise o
+        return o
+
+    def cancel(self):
+        self.process.terminate()
+        o = TimeoutFctException()
+        self.queue.put(o)
 
 
 class Timer:
@@ -418,6 +477,16 @@ class ServerModel(object):
         predictions = []
         if len(texts_to_translate) > 0:
             try:
+                translate_with_timeout = TimeoutFct(5)
+                translate_with_timeout.run(
+                    self.translator.translate,
+                    texts_to_translate,
+                    batch_size=len(texts_to_translate)
+                                   if self.opt.batch_size == 0
+                                   else self.opt.batch_size
+                )
+                
+
                 scores, predictions = self.translator.translate(
                     texts_to_translate,
                     batch_size=len(texts_to_translate)
