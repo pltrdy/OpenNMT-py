@@ -582,8 +582,10 @@ def _add_train_general_opts(parser):
               help="Decay every decay_steps")
 
     group.add('--decay_method', '-decay_method', type=str, default="none",
-              choices=['noam', 'noamwd', 'rsqrt', 'none'],
+              choices=['noam', 'noamwd', 'rsqrt', 'none', 'invsq'],
               help="Use a custom decay rate.")
+    group.add('--warmup_init_factor', '-warmup_init_factor', type=int, default=5000,
+              help="Ratio of max lr to initial lr for invsq decay scheme.")
     group.add('--warmup_steps', '-warmup_steps', type=int, default=4000,
               help="Number of warmup steps for custom decay.")
     _add_logging_opts(parser, is_train=True)

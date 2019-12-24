@@ -116,6 +116,11 @@ def make_learning_rate_decay_fn(opt):
     elif opt.decay_method == 'rsqrt':
         return functools.partial(
             rsqrt_decay, warmup_steps=opt.warmup_steps)
+    elif opt.decay_method == 'invsq':
+        return functools.partial(
+            invsq_decay,
+            warmup_steps=opt.warmup_steps,
+            warmup_init_factor=opt.warmup_init_factor)
     elif opt.start_decay_steps is not None:
         return functools.partial(
             exponential_decay,
@@ -154,6 +159,11 @@ def rsqrt_decay(step, warmup_steps):
     """Decay based on the reciprocal of the step square root."""
     return 1.0 / sqrt(max(step, warmup_steps))
 
+def invsq_decay(step, warmup_steps, warmup_init_factor):
+    if step < warmup_steps:
+        return 1.0/warmup_init_factor + (1 - 1.0/warmup_init_factor)/warmup_steps*step
+    else:
+        return (warmup_steps/step)**0.5
 
 class MultipleOptimizer(object):
     """ Implement multiple optimizers needed for sparse adam """
