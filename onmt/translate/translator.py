@@ -563,6 +563,7 @@ class Translator(object):
 
     def _decode_and_generate(
             self,
+            src_embs,
             decoder_in,
             memory_bank,
             batch,
@@ -581,7 +582,7 @@ class Translator(object):
         # and [src_len, batch, hidden] as memory_bank
         # in case of inference tgt_len = 1, batch = beam times batch_size
         # in case of Gold Scoring tgt_len = actual length, batch = 1 batch
-        dec_out, dec_attn = self.model.decoder(
+        tgt_embs, dec_out, dec_attn = self.model.decoder(
             decoder_in, memory_bank, memory_lengths=memory_lengths, step=step
         )
 
@@ -596,9 +597,10 @@ class Translator(object):
             # or [ tgt_len, batch_size, vocab ] when full sentence
         else:
             attn = dec_attn["copy"]
-            scores = self.model.generator(dec_out.view(-1, dec_out.size(2)),
-                                          attn.view(-1, attn.size(2)),
-                                          src_map)
+            scores = self.model.generator(
+                dec_out.view(-1, dec_out.size(2)),
+                attn.view(-1, attn.size(2)),
+                src_map)
             # here we have scores [tgt_lenxbatch, vocab] or [beamxbatch, vocab]
             if batch_offset is None:
                 scores = scores.view(-1, batch.batch_size, scores.size(-1))
@@ -644,6 +646,10 @@ class Translator(object):
         src, enc_states, memory_bank, src_lengths = self._run_encoder(batch)
         self.model.decoder.init_state(src, memory_bank, enc_states)
 
+        # only true if transformer
+        src_embs = enc_states
+        assert isinstance(self.model.encoder, onmt.encoders.TransformerEncoder)
+
         results = {
             "predictions": None,
             "scores": None,
@@ -667,6 +673,7 @@ class Translator(object):
             decoder_input = decode_strategy.current_predictions.view(1, -1, 1)
 
             log_probs, attn = self._decode_and_generate(
+                src_embs,
                 decoder_input,
                 memory_bank,
                 batch,

@@ -10,6 +10,8 @@ from onmt.modules.embeddings import Embeddings, PositionalEncoding
 from onmt.modules.weight_norm import WeightNormConv2d
 from onmt.modules.average_attn import AverageAttention
 
+import onmt.modules.importance_loss # noqa
+
 __all__ = ["Elementwise", "context_gate_factory", "ContextGate",
            "GlobalAttention", "ConvMultiStepAttention", "CopyGenerator",
            "CopyGeneratorLoss", "CopyGeneratorLossCompute",
