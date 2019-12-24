@@ -50,17 +50,38 @@ def build_loss_compute(model, tgt_field, opt, train=True):
     # loss function of this kind is the sparsemax loss.
     use_raw_logits = isinstance(criterion, SparsemaxLoss)
     loss_gen = model.generator[0] if use_raw_logits else model.generator
+    
+    importance = getattr(opt, "importance", False)
     if opt.copy_attn:
-        compute = onmt.modules.CopyGeneratorLossCompute(
-            criterion, loss_gen, tgt_field.vocab, opt.copy_loss_by_seqlength,
-            lambda_coverage=opt.lambda_coverage
-        )
+        if importance:
+            importance_lambda = getattr(opt, "importance_lambda", 0.5)
+            importance_alpha = getattr(opt, "importance_alpha", 1.0)
+            importance_beta = getattr(opt, "importance_beta", 1.0)
+            importance_agg = getattr(opt, "importance_agg", "sum")
+            importance_summary = getattr(opt, "importance_summary", "pred")
+            importance_q = getattr(opt, "importance_q", None)
+            compute = onmt.modules.importance_loss.ImportanceLossCompute(
+                criterion, loss_gen, tgt_field.vocab, opt.copy_loss_by_seqlength,
+                lambda_coverage=opt.lambda_coverage,
+                importance_lambda=importance_lambda,
+                importance_q=importance_q,
+                importance_agg=importance_agg,
+                importance_summary=importance_summary,
+                importance_alpha=importance_alpha,
+                importance_beta=importance_beta,
+            )
+        else:
+            compute = onmt.modules.CopyGeneratorLossCompute(
+                criterion, loss_gen, tgt_field.vocab, opt.copy_loss_by_seqlength,
+                lambda_coverage=opt.lambda_coverage
+            )
     else:
+        assert not importance, "Importance only implemented w/ copy attn"
         compute = NMTLossCompute(
             criterion, loss_gen, lambda_coverage=opt.lambda_coverage,
             lambda_align=opt.lambda_align)
     compute.to(device)
-
+    compute._embeddings = model.decoder.embeddings
     return compute
 
 
@@ -92,7 +113,7 @@ class LossComputeBase(nn.Module):
     def padding_idx(self):
         return self.criterion.ignore_index
 
-    def _make_shard_state(self, batch, output, range_, attns=None):
+    def _make_shard_state(self, src_embs, tgt_embs, batch, output, range_, attns=None):
         """
         Make shard state dictionary for shards() to return iterable
         shards for efficient loss computation. Subclass must define
@@ -120,6 +141,8 @@ class LossComputeBase(nn.Module):
         return NotImplementedError
 
     def __call__(self,
+                 src_embs,
+                 tgt_embs,
                  batch,
                  output,
                  attns,
@@ -157,7 +180,7 @@ class LossComputeBase(nn.Module):
         if trunc_size is None:
             trunc_size = batch.tgt.size(0) - trunc_start
         trunc_range = (trunc_start, trunc_start + trunc_size)
-        shard_state = self._make_shard_state(batch, output, trunc_range, attns)
+        shard_state = self._make_shard_state(src_embs, tgt_embs, batch, output, trunc_range, attns)
         if shard_size == 0:
             loss, stats = self._compute_loss(batch, **shard_state)
             return loss / float(normalization), stats
@@ -232,11 +255,16 @@ class NMTLossCompute(LossComputeBase):
         self.lambda_coverage = lambda_coverage
         self.lambda_align = lambda_align
 
-    def _make_shard_state(self, batch, output, range_, attns=None):
+    def _make_shard_state(self, src_embs, tgt_embs, batch, output, range_, attns=None):
+        std = attns.get("std", None)
         shard_state = {
+            "src_embs": src_embs,
+            "tgt_embs": tgt_embs,
             "output": output,
             "target": batch.tgt[range_[0] + 1: range_[1], :, 0],
+            "std_attn": std
         }
+
         if self.lambda_coverage != 0.0:
             coverage = attns.get("coverage", None)
             std = attns.get("std", None)

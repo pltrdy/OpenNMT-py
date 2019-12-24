@@ -1,6 +1,8 @@
 """ Onmt NMT Model base class definition """
 import torch.nn as nn
 
+import onmt
+
 
 class NMTModel(nn.Module):
     """
@@ -43,13 +45,17 @@ class NMTModel(nn.Module):
         dec_in = tgt[:-1]  # exclude last target from inputs
 
         enc_state, memory_bank, lengths = self.encoder(src, lengths)
+        
+        # only true if transformer
+        src_embs = enc_state
+        assert isinstance(self.encoder, onmt.encoders.TransformerEncoder)
 
         if bptt is False:
             self.decoder.init_state(src, memory_bank, enc_state)
-        dec_out, attns = self.decoder(dec_in, memory_bank,
+        tgt_embs, dec_out, attns = self.decoder(dec_in, memory_bank,
                                       memory_lengths=lengths,
                                       with_align=with_align)
-        return dec_out, attns
+        return src_embs, tgt_embs, dec_out, attns
 
     def update_dropout(self, dropout):
         self.encoder.update_dropout(dropout)

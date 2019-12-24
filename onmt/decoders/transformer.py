@@ -253,8 +253,10 @@ class TransformerDecoder(DecoderBase):
             self._init_cache(memory_bank)
 
         tgt_words = tgt[:, :, 0].transpose(0, 1)
-
+        
+        # print("[decoder] tgt(pre-emb): ", tgt.size())
         emb = self.embeddings(tgt, step=step)
+        # print("[decoder] emb: ", emb.size())
         assert emb.dim() == 3  # len x batch x embedding_dim
 
         output = emb.transpose(0, 1).contiguous()
@@ -295,7 +297,7 @@ class TransformerDecoder(DecoderBase):
             # attns["align"] = torch.stack(attn_aligns, 0).mean(0)  # All avg
 
         # TODO change the way attns is returned dict => list or tuple (onnx)
-        return dec_outs, attns
+        return emb, dec_outs, attns
 
     def _init_cache(self, memory_bank):
         self.state["cache"] = {}

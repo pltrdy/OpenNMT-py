@@ -239,9 +239,11 @@ class Trainer(object):
                                     .all_gather_list
                                     (normalization))
 
-            self._gradient_accumulation(
-                batches, normalization, total_stats,
-                report_stats)
+            from torch import autograd
+            with autograd.detect_anomaly():
+                self._gradient_accumulation(
+                    batches, normalization, total_stats,
+                    report_stats)
 
             if self.average_decay > 0 and i % self.average_every == 0:
                 self._update_average(step)
@@ -314,11 +316,12 @@ class Trainer(object):
                 tgt = batch.tgt
 
                 # F-prop through the model.
-                outputs, attns = valid_model(src, tgt, src_lengths,
+                src_embs, tgt_embs, outputs, attns = valid_model(src, tgt, src_lengths,
                                              with_align=self.with_align)
 
                 # Compute loss.
-                _, batch_stats = self.valid_loss(batch, outputs, attns)
+                _, batch_stats = self.valid_loss(
+                    src_embs, tgt_embs, batch, outputs, attns)
 
                 # Update statistics.
                 stats.update(batch_stats)
@@ -361,13 +364,15 @@ class Trainer(object):
                 if self.accum_count == 1:
                     self.optim.zero_grad()
 
-                outputs, attns = self.model(src, tgt, src_lengths, bptt=bptt,
+                src_embs, tgt_embs, outputs, attns = self.model(src, tgt, src_lengths, bptt=bptt,
                                             with_align=self.with_align)
                 bptt = True
 
                 # 3. Compute loss.
                 try:
                     loss, batch_stats = self.train_loss(
+                        src_embs,
+                        tgt_embs,
                         batch,
                         outputs,
                         attns,
@@ -377,6 +382,7 @@ class Trainer(object):
                         trunc_size=trunc_size)
 
                     if loss is not None:
+                        # print("BACKWARD")
                         self.optim.backward(loss)
 
                     total_stats.update(batch_stats)
@@ -386,6 +392,16 @@ class Trainer(object):
                     traceback.print_exc()
                     logger.info("At step %d, we removed a batch - accum %d",
                                 self.optim.training_step, k)
+                    print("Inspecting params")
+                    for name, p in self.model.named_parameters():
+                        try:
+                            if not p.eq(p).all():
+                                print("NaN in parameters: %s" % name)
+                                print(p)
+                        except Exception:
+                            print("Exeption while examining %s" % name)
+                            print(p)
+                    raise
 
                 # 4. Update the parameters and statistics.
                 if self.accum_count == 1:
@@ -396,6 +412,7 @@ class Trainer(object):
                                  and p.grad is not None]
                         onmt.utils.distributed.all_reduce_and_rescale_tensors(
                             grads, float(1))
+                    # print("STEP(not BACKWARD)")
                     self.optim.step()
 
                 # If truncated, don't backprop fully.
@@ -414,6 +431,7 @@ class Trainer(object):
                          and p.grad is not None]
                 onmt.utils.distributed.all_reduce_and_rescale_tensors(
                     grads, float(1))
+            # print("STEP(not BACKWARD)")
             self.optim.step()
 
     def _start_report_manager(self, start_time=None):

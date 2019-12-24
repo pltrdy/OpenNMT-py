@@ -171,8 +171,11 @@ def build_base_model(model_opt, fields, gpu, checkpoint=None, gpu_id=None):
         device = torch.device("cpu")
     model = onmt.models.NMTModel(encoder, decoder)
 
+    importance = getattr(model_opt, "importance", False)
+
     # Build Generator.
     if not model_opt.copy_attn:
+        assert not importance
         if model_opt.generator_function == "sparsemax":
             gen_func = onmt.modules.sparse_activations.LogSparsemax(dim=-1)
         else:
@@ -189,7 +192,12 @@ def build_base_model(model_opt, fields, gpu, checkpoint=None, gpu_id=None):
         tgt_base_field = fields["tgt"].base_field
         vocab_size = len(tgt_base_field.vocab)
         pad_idx = tgt_base_field.vocab.stoi[tgt_base_field.pad_token]
-        generator = CopyGenerator(model_opt.dec_rnn_size, vocab_size, pad_idx)
+
+        if importance:
+            generator_class = onmt.modules.importance_loss.ImportanceGenerator
+        else:
+            generator_class = CopyGenerator
+        generator = generator_class(model_opt.dec_rnn_size, vocab_size, pad_idx)
 
     # Load the model states from checkpoint or initialize them.
     if checkpoint is not None:
