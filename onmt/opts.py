@@ -354,6 +354,7 @@ def model_opts(parser):
     group.add("--importance_lambda", "-importance_lambda", type=float, default=0.5)
     group.add("--importance_alpha", "-importance_alpha", type=float, default=1.0)
     group.add("--importance_beta", "-importance_beta", type=float, default=1.0)
+    group.add("--importance_gamma", "-importance_gamma", type=float, default=1.0)
     group.add("--importance_q", "-importance_q", type=float, default=None)
     group.add("--importance_summary", "-importance_summary", type=str, default="pred")
     group.add("--importance_agg", "-importance_agg", type=str, default="sum")
