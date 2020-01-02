@@ -57,6 +57,7 @@ def build_loss_compute(model, tgt_field, opt, train=True):
             importance_lambda = getattr(opt, "importance_lambda", 0.5)
             importance_alpha = getattr(opt, "importance_alpha", 1.0)
             importance_beta = getattr(opt, "importance_beta", 1.0)
+            importance_gamma = getattr(opt, "importance_gamma", 1.0)
             importance_agg = getattr(opt, "importance_agg", "sum")
             importance_summary = getattr(opt, "importance_summary", "pred")
             importance_q = getattr(opt, "importance_q", None)
@@ -69,6 +70,7 @@ def build_loss_compute(model, tgt_field, opt, train=True):
                 importance_summary=importance_summary,
                 importance_alpha=importance_alpha,
                 importance_beta=importance_beta,
+                importance_gamma=importance_gamma
             )
         else:
             compute = onmt.modules.CopyGeneratorLossCompute(
