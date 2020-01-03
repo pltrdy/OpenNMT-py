@@ -281,6 +281,8 @@ def preprocess_opts(parser):
               help="Create dynamic dictionaries")
     group.add('--share_vocab', '-share_vocab', action='store_true',
               help="Share source and target vocabulary")
+    group.add('--fixed_vocab', '-fixed_vocab', action='store_true',
+              help="Do not modify the passed in vocab")
 
     # Truncation options, for text corpus
     group = parser.add_argument_group('Pruning')

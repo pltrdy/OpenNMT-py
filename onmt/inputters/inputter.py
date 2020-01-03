@@ -102,9 +102,12 @@ def get_fields(
     src_data_type,
     n_src_feats,
     n_tgt_feats,
-    pad='<blank>',
-    bos='<s>',
-    eos='</s>',
+    src_pad='<blank>',
+    src_unk='<unk>',
+    tgt_pad='<blank>',
+    tgt_unk='<unk>',
+    tgt_bos='<s>',
+    tgt_eos='</s>',
     dynamic_dict=False,
     with_align=False,
     src_truncate=None,
@@ -149,14 +152,20 @@ def get_fields(
 
     src_field_kwargs = {"n_feats": n_src_feats,
                         "include_lengths": True,
-                        "pad": pad, "bos": None, "eos": None,
+                        "pad": src_pad,
+                        "bos": None,
+                        "eos": None,
+                        "unk": src_unk,
                         "truncate": src_truncate,
                         "base_name": "src"}
     fields["src"] = fields_getters[src_data_type](**src_field_kwargs)
 
     tgt_field_kwargs = {"n_feats": n_tgt_feats,
                         "include_lengths": False,
-                        "pad": pad, "bos": bos, "eos": eos,
+                        "pad": tgt_pad,
+                        "bos": tgt_bos,
+                        "eos": tgt_eos,
+                        "unk": tgt_unk,
                         "truncate": tgt_truncate,
                         "base_name": "tgt"}
     fields["tgt"] = fields_getters["text"](**tgt_field_kwargs)
@@ -326,12 +335,18 @@ def _pad_vocab_to_multiple(vocab, multiple):
     return vocab
 
 
-def _build_field_vocab(field, counter, size_multiple=1, **kwargs):
+def _build_field_vocab(field, counter, fixed_vocab=False, size_multiple=1,
+                       **kwargs):
     # this is basically copy-pasted from torchtext.
     all_specials = [
         field.unk_token, field.pad_token, field.init_token, field.eos_token
     ]
-    specials = [tok for tok in all_specials if tok is not None]
+    if fixed_vocab:
+        print("FIXED VOCAB!")
+        specials = []
+    else:
+        specials = [tok for tok in all_specials if tok is not None]
+
     field.vocab = field.vocab_cls(counter, specials=specials, **kwargs)
     if size_multiple > 1:
         _pad_vocab_to_multiple(field.vocab, size_multiple)
@@ -350,11 +365,12 @@ def _load_vocab(vocab_path, name, counters, min_freq):
 
 
 def _build_fv_from_multifield(multifield, counters, build_fv_args,
-                              size_multiple=1):
+                              fixed_vocab=False, size_multiple=1):
     for name, field in multifield:
         _build_field_vocab(
             field,
             counters[name],
+            fixed_vocab=fixed_vocab,
             size_multiple=size_multiple,
             **build_fv_args[name])
         logger.info(" * %s vocab size: %d." % (name, len(field.vocab)))
@@ -363,7 +379,8 @@ def _build_fv_from_multifield(multifield, counters, build_fv_args,
 def _build_fields_vocab(fields, counters, data_type, share_vocab,
                         vocab_size_multiple,
                         src_vocab_size, src_words_min_frequency,
-                        tgt_vocab_size, tgt_words_min_frequency):
+                        tgt_vocab_size, tgt_words_min_frequency,
+                        fixed_vocab=False):
     build_fv_args = defaultdict(dict)
     build_fv_args["src"] = dict(
         max_size=src_vocab_size, min_freq=src_words_min_frequency)
@@ -374,6 +391,7 @@ def _build_fields_vocab(fields, counters, data_type, share_vocab,
         tgt_multifield,
         counters,
         build_fv_args,
+        fixed_vocab=fixed_vocab,
         size_multiple=vocab_size_multiple if not share_vocab else 1)
     if data_type == 'text':
         src_multifield = fields["src"]
@@ -381,6 +399,7 @@ def _build_fields_vocab(fields, counters, data_type, share_vocab,
             src_multifield,
             counters,
             build_fv_args,
+            fixed_vocab=fixed_vocab,
             size_multiple=vocab_size_multiple if not share_vocab else 1)
         if share_vocab:
             # `tgt_vocab_size` is ignored when sharing vocabularies
@@ -399,7 +418,7 @@ def _build_fields_vocab(fields, counters, data_type, share_vocab,
 def build_vocab(train_dataset_files, fields, data_type, share_vocab,
                 src_vocab_path, src_vocab_size, src_words_min_frequency,
                 tgt_vocab_path, tgt_vocab_size, tgt_words_min_frequency,
-                vocab_size_multiple=1):
+                fixed_vocab=False, vocab_size_multiple=1):
     """Build the fields for all data sides.
 
     Args:
@@ -415,6 +434,7 @@ def build_vocab(train_dataset_files, fields, data_type, share_vocab,
         tgt_vocab_size (int): size of the target vocabulary.
         tgt_words_min_frequency (int): the minimum frequency needed to
             include a target word in the vocabulary.
+        fixed_vocab (bool): do not modify the loaded vocabs
         vocab_size_multiple (int): ensure that the vocabulary size is a
             multiple of this value.
 
@@ -451,40 +471,42 @@ def build_vocab(train_dataset_files, fields, data_type, share_vocab,
     else:
         tgt_vocab = None
 
-    for i, path in enumerate(train_dataset_files):
-        dataset = torch.load(path)
-        logger.info(" * reloading %s." % path)
-        for ex in dataset.examples:
-            for name, field in fields.items():
-                try:
-                    f_iter = iter(field)
-                except TypeError:
-                    f_iter = [(name, field)]
-                    all_data = [getattr(ex, name, None)]
-                else:
-                    all_data = getattr(ex, name)
-                for (sub_n, sub_f), fd in zip(
-                        f_iter, all_data):
-                    has_vocab = (sub_n == 'src' and src_vocab) or \
-                                (sub_n == 'tgt' and tgt_vocab)
-                    if sub_f.sequential and not has_vocab:
-                        val = fd
-                        counters[sub_n].update(val)
+    if not fixed_vocab:
+        for i, path in enumerate(train_dataset_files):
+            dataset = torch.load(path)
+            logger.info(" * reloading %s." % path)
+            for ex in dataset.examples:
+                for name, field in fields.items():
+                    try:
+                        f_iter = iter(field)
+                    except TypeError:
+                        f_iter = [(name, field)]
+                        all_data = [getattr(ex, name, None)]
+                    else:
+                        all_data = getattr(ex, name)
+                    for (sub_n, sub_f), fd in zip(
+                            f_iter, all_data):
+                        has_vocab = (sub_n == 'src' and src_vocab) or \
+                                    (sub_n == 'tgt' and tgt_vocab)
+                        if sub_f.sequential and not has_vocab:
+                            val = fd
+                            counters[sub_n].update(val)
 
-        # Drop the none-using from memory but keep the last
-        if i < len(train_dataset_files) - 1:
-            dataset.examples = None
-            gc.collect()
-            del dataset.examples
-            gc.collect()
-            del dataset
-            gc.collect()
+            # Drop the none-using from memory but keep the last
+            if i < len(train_dataset_files) - 1:
+                dataset.examples = None
+                gc.collect()
+                del dataset.examples
+                gc.collect()
+                del dataset
+                gc.collect()
 
     fields = _build_fields_vocab(
         fields, counters, data_type,
         share_vocab, vocab_size_multiple,
         src_vocab_size, src_words_min_frequency,
-        tgt_vocab_size, tgt_words_min_frequency)
+        tgt_vocab_size, tgt_words_min_frequency,
+        fixed_vocab=fixed_vocab)
 
     return fields  # is the return necessary?
 

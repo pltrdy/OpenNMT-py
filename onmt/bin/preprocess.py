@@ -209,22 +209,25 @@ def build_save_dataset(corpus_type, fields, src_reader, tgt_reader,
                 fields, counters, opt.data_type,
                 opt.share_vocab, opt.vocab_size_multiple,
                 opt.src_vocab_size, opt.src_words_min_frequency,
-                opt.tgt_vocab_size, opt.tgt_words_min_frequency)
+                opt.tgt_vocab_size, opt.tgt_words_min_frequency,
+                fixed_vocab=opt.fixed_vocab)
         else:
             fields = existing_fields
         torch.save(fields, vocab_path)
 
 
-def build_save_vocab(train_dataset, fields, opt):
-    fields = inputters.build_vocab(
-        train_dataset, fields, opt.data_type, opt.share_vocab,
-        opt.src_vocab, opt.src_vocab_size, opt.src_words_min_frequency,
-        opt.tgt_vocab, opt.tgt_vocab_size, opt.tgt_words_min_frequency,
-        vocab_size_multiple=opt.vocab_size_multiple
-    )
-    vocab_path = opt.save_data + '.vocab.pt'
-    torch.save(fields, vocab_path)
-
+# def build_save_vocab(train_dataset, fields, opt):
+#     
+#     print("PREPROCESS FIXED VOCAB: ", opt.fixed_vocab)
+#     fields = inputters.build_vocab(
+#         train_dataset, fields, opt.data_type, opt.share_vocab,
+#         opt.src_vocab, opt.src_vocab_size, opt.src_words_min_frequency,
+#         opt.tgt_vocab, opt.tgt_vocab_size, opt.tgt_words_min_frequency,
+#         fixed_vocab=opt.fixed_vocab, vocab_size_multiple=opt.vocab_size_multiple
+#     )
+#     vocab_path = opt.save_data + '.vocab.pt'
+#     torch.save(fields, vocab_path)
+# 
 
 def count_features(path):
     """
@@ -255,6 +258,23 @@ def preprocess(opt):
     logger.info(" * number of target features: %d." % tgt_nfeats)
 
     logger.info("Building `Fields` object...")
+
+    if opt.fixed_vocab:
+        tgt_bos = '<|endoftext|>'
+        tgt_eos = '\u0120GDDR'
+        tgt_pad = '\u0120SHALL'
+        tgt_unk = '\u0120RELE'
+        src_pad = '\u0120SHALL'
+        src_unk = '\u0120RELE'
+
+    else:
+        tgt_bos='<s>'
+        tgt_eos='</s>'
+        tgt_pad = '<blank>'
+        tgt_unk='<unk>'
+        src_pad = '<blank>'
+        src_unk='<unk>'
+
     fields = inputters.get_fields(
         opt.data_type,
         src_nfeats,
@@ -262,7 +282,13 @@ def preprocess(opt):
         dynamic_dict=opt.dynamic_dict,
         with_align=opt.train_align[0] is not None,
         src_truncate=opt.src_seq_length_trunc,
-        tgt_truncate=opt.tgt_seq_length_trunc)
+        tgt_truncate=opt.tgt_seq_length_trunc,
+        src_pad=src_pad,
+        src_unk=src_unk,
+        tgt_pad=tgt_pad,
+        tgt_unk=tgt_unk,
+        tgt_bos=tgt_bos,
+        tgt_eos=tgt_eos)
 
     src_reader = inputters.str2reader[opt.data_type].from_opt(opt)
     tgt_reader = inputters.str2reader["text"].from_opt(opt)

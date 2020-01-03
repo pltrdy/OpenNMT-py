@@ -68,6 +68,7 @@ def main(opt, device_id, batch_queue=None, semaphore=None):
             vocab, opt.model_type, dynamic_dict=opt.copy_attn)
     else:
         fields = vocab
+    assert fields["src"].base_field.vocab == fields["tgt"].base_field.vocab
 
     # Report src and tgt vocab sizes, including for features
     for side in ['src', 'tgt']:
