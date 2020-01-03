@@ -30,7 +30,6 @@ def _get_model_opts(opt, checkpoint=None):
         model_opt = opt
     return model_opt
 
-
 def _build_valid_iter(opt, fields, transforms_cls):
     """Build iterator used for validation."""
     valid_iter = build_dynamic_dataset_iter(
