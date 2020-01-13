@@ -181,7 +181,6 @@ def build_base_model(model_opt, fields, gpu, checkpoint=None, gpu_id=None):
         else:
             generator_class = CopyGenerator
         generator = generator_class(model_opt.dec_rnn_size, vocab_size, pad_idx)
-        
         if model_opt.share_decoder_embeddings:
             generator.linear.weight = decoder.embeddings.word_lut.weight
 
