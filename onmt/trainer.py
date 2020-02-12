@@ -239,11 +239,9 @@ class Trainer(object):
                                     .all_gather_list
                                     (normalization))
 
-            from torch import autograd
-            with autograd.detect_anomaly():
-                self._gradient_accumulation(
-                    batches, normalization, total_stats,
-                    report_stats)
+            self._gradient_accumulation(
+                batches, normalization, total_stats,
+                report_stats)
 
             if self.average_decay > 0 and i % self.average_every == 0:
                 self._update_average(step)
