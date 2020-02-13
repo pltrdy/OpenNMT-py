@@ -155,9 +155,11 @@ def build_base_model(model_opt, fields, gpu, checkpoint=None, gpu_id=None):
     model = onmt.models.NMTModel(encoder, decoder)
 
     importance = getattr(model_opt, "importance", False)
+    abstract = getattr(model_opt, "abstract", False)
 
     # Build Generator.
     if not model_opt.copy_attn:
+        assert not abstract
         assert not importance
         if model_opt.generator_function == "sparsemax":
             gen_func = onmt.modules.sparse_activations.LogSparsemax(dim=-1)
@@ -176,8 +178,11 @@ def build_base_model(model_opt, fields, gpu, checkpoint=None, gpu_id=None):
         vocab_size = len(tgt_base_field.vocab)
         pad_idx = tgt_base_field.vocab.stoi[tgt_base_field.pad_token]
         
+        assert not (abstract and importance)
         if importance:
             generator_class = onmt.modules.importance_loss.ImportanceGenerator
+        elif abstract:
+            generator_class = onmt.modules.abstractive_generator.AbstractiveGenerator 
         else:
             generator_class = CopyGenerator
         generator = generator_class(model_opt.dec_rnn_size, vocab_size, pad_idx)

@@ -11,6 +11,7 @@ from onmt.modules.weight_norm import WeightNormConv2d
 from onmt.modules.average_attn import AverageAttention
 
 import onmt.modules.importance_loss # noqa
+import onmt.modules.abstractive_generator # noqa
 
 __all__ = ["Elementwise", "context_gate_factory", "ContextGate",
            "GlobalAttention", "ConvMultiStepAttention", "CopyGenerator",

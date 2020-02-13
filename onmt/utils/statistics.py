@@ -17,11 +17,12 @@ class Statistics(object):
     * elapsed time
     """
 
-    def __init__(self, loss=0, n_words=0, n_correct=0):
+    def __init__(self, loss=0, n_words=0, n_correct=0, abs_loss=0):
         self.loss = loss
         self.n_words = n_words
         self.n_correct = n_correct
         self.n_src_words = 0
+        self.abs_loss = abs_loss
         self.start_time = time.time()
 
     @staticmethod
@@ -79,6 +80,7 @@ class Statistics(object):
 
         """
         self.loss += stat.loss
+        self.abs_loss += stat.abs_loss
         self.n_words += stat.n_words
         self.n_correct += stat.n_correct
 
@@ -96,6 +98,9 @@ class Statistics(object):
     def ppl(self):
         """ compute perplexity """
         return math.exp(min(self.loss / self.n_words, 100))
+    
+    def abs(self):
+        return self.abs_loss / self.n_words
 
     def elapsed_time(self):
         """ compute elapsed time """
@@ -109,17 +114,19 @@ class Statistics(object):
            n_batch (int): total batches
            start (int): start time of step.
         """
+
         t = self.elapsed_time()
         step_fmt = "%2d" % step
         if num_steps > 0:
             step_fmt = "%s/%5d" % (step_fmt, num_steps)
         logger.info(
-            ("Step %s; acc: %6.2f; ppl: %5.2f; xent: %4.2f; " +
+            ("Step %s; acc: %6.2f; ppl: %5.2f; xent: %4.2f; abs: %4.2f" +
              "lr: %7.5f; %3.0f/%3.0f tok/s; %6.0f sec")
             % (step_fmt,
                self.accuracy(),
                self.ppl(),
                self.xent(),
+               self.abs(),
                learning_rate,
                self.n_src_words / (t + 1e-5),
                self.n_words / (t + 1e-5),
@@ -132,6 +139,7 @@ class Statistics(object):
         writer.add_scalar(prefix + "/xent", self.xent(), step)
         writer.add_scalar(prefix + "/ppl", self.ppl(), step)
         writer.add_scalar(prefix + "/accuracy", self.accuracy(), step)
+        writer.add_scalar(prefix + "/abstract_loss", self.abs(), step)
         writer.add_scalar(prefix + "/tgtper", self.n_words / t, step)
         writer.add_scalar(prefix + "/lr", learning_rate, step)
         if patience is not None:
