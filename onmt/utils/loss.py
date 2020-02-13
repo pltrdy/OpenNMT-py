@@ -54,7 +54,6 @@ def build_loss_compute(model, tgt_field, opt, train=True):
     importance = getattr(opt, "importance", False)
     abstract = getattr(opt, "abstract", False)
     if opt.copy_attn:
-        assert not (importance and abstract)
         if importance:
             importance_lambda = getattr(opt, "importance_lambda", 0.5)
             importance_alpha = getattr(opt, "importance_alpha", 1.0)
@@ -74,11 +73,6 @@ def build_loss_compute(model, tgt_field, opt, train=True):
                 importance_beta=importance_beta,
                 importance_gamma=importance_gamma
             )
-        elif abstract:
-            compute = onmt.modules.abstractive_generator.AbstractiveLossCompute(
-                criterion, loss_gen, tgt_field.vocab, opt.copy_loss_by_seqlength,
-                lambda_coverage=opt.lambda_coverage
-            )
         else:
             compute = onmt.modules.CopyGeneratorLossCompute(
                 criterion, loss_gen, tgt_field.vocab, opt.copy_loss_by_seqlength,
@@ -86,10 +80,12 @@ def build_loss_compute(model, tgt_field, opt, train=True):
             )
     else:
         assert not importance, "Importance only implemented w/ copy attn"
-        assert not abstract, "Importance only implemented w/ copy attn"
         compute = NMTLossCompute(
             criterion, loss_gen, lambda_coverage=opt.lambda_coverage,
             lambda_align=opt.lambda_align)
+
+    if abstract:
+        compute = onmt.modules.abstractive_generator.AbstractiveLossCompute(compute)
     compute.to(device)
     compute._embeddings = model.decoder.embeddings
     return compute
