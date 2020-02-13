@@ -170,6 +170,7 @@ def model_opts(parser):
 
     # Generator and loss options.
     group = parser.add_argument_group('Generator')
+    group.add("--abstract", "-abstract", action="store_true")
     group.add("--importance", "-importance", action="store_true")
     group.add("--importance_lambda", "-importance_lambda", type=float, default=0.5)
     group.add("--importance_alpha", "-importance_alpha", type=float, default=1.0)
