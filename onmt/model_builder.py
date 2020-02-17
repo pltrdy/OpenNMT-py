@@ -155,7 +155,6 @@ def build_base_model(model_opt, fields, gpu, checkpoint=None, gpu_id=None):
     model = onmt.models.NMTModel(encoder, decoder)
 
     importance = getattr(model_opt, "importance", False)
-    abstract = getattr(model_opt, "abstract", False)
 
     # Build Generator.
     if not model_opt.copy_attn:

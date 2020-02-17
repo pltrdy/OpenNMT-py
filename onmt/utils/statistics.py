@@ -24,6 +24,7 @@ class Statistics(object):
         self.n_src_words = 0
         self.abs_loss = abs_loss
         self.start_time = time.time()
+        self.additional_metrics = {}
 
     @staticmethod
     def all_gather_stats(stat, max_size=4096):
@@ -83,9 +84,14 @@ class Statistics(object):
         self.abs_loss += stat.abs_loss
         self.n_words += stat.n_words
         self.n_correct += stat.n_correct
-
+        self.update_additional_metrics(stat.additional_metrics)
         if update_n_src_words:
             self.n_src_words += stat.n_src_words
+
+    def update_additional_metrics(self, d):
+        for k, v in d.items():
+            _v = self.additional_metrics.get(k, 0)
+            self.additional_metrics[k] = _v + v
 
     def accuracy(self):
         """ compute accuracy """
@@ -114,19 +120,24 @@ class Statistics(object):
            n_batch (int): total batches
            start (int): start time of step.
         """
-
+        add_metrics = ""
+        if len(self.additional_metrics) > 0:
+            add_metrics = ", ".join(["%s: %3.3f" % (str(k), (v/self.n_words))
+                                     for k, v in self.additional_metrics.items()])
+            add_metrics = " [[%s]];" % add_metrics
         t = self.elapsed_time()
         step_fmt = "%2d" % step
         if num_steps > 0:
             step_fmt = "%s/%5d" % (step_fmt, num_steps)
         logger.info(
-            ("Step %s; acc: %6.2f; ppl: %5.2f; xent: %4.2f; abs: %4.2f" +
+            ("Step %s; acc: %6.2f; ppl: %5.2f; xent: %4.2f; abs: %4.2f;%s" +
              "lr: %7.5f; %3.0f/%3.0f tok/s; %6.0f sec")
             % (step_fmt,
                self.accuracy(),
                self.ppl(),
                self.xent(),
                self.abs(),
+               add_metrics,
                learning_rate,
                self.n_src_words / (t + 1e-5),
                self.n_words / (t + 1e-5),
