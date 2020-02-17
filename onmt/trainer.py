@@ -314,12 +314,13 @@ class Trainer(object):
                 tgt = batch.tgt
 
                 # F-prop through the model.
-                src_embs, tgt_embs, outputs, attns = valid_model(src, tgt, src_lengths,
+                src_embs, tgt_embs, outputs, attns, dec_context = valid_model(src, tgt, src_lengths,
                                              with_align=self.with_align)
 
                 # Compute loss.
                 _, batch_stats = self.valid_loss(
-                    src_embs, tgt_embs, batch, outputs, attns)
+                    src_embs, tgt_embs, batch, outputs, attns,
+                    decoder_context=dec_context)
 
                 # Update statistics.
                 stats.update(batch_stats)
@@ -362,7 +363,7 @@ class Trainer(object):
                 if self.accum_count == 1:
                     self.optim.zero_grad()
 
-                src_embs, tgt_embs, outputs, attns = self.model(src, tgt, src_lengths, bptt=bptt,
+                src_embs, tgt_embs, outputs, attns, dec_context = self.model(src, tgt, src_lengths, bptt=bptt,
                                             with_align=self.with_align)
                 bptt = True
 
@@ -377,7 +378,8 @@ class Trainer(object):
                         normalization=normalization,
                         shard_size=self.shard_size,
                         trunc_start=j,
-                        trunc_size=trunc_size)
+                        trunc_size=trunc_size,
+                        decoder_context=dec_context)
 
                     if loss is not None:
                         # print("BACKWARD")

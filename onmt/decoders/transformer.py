@@ -65,13 +65,13 @@ class TransformerDecoderLayer(nn.Module):
             * attn_align ``(batch_size, 1, src_len)`` or None
         """
         with_align = kwargs.pop('with_align', False)
-        output, attns = self._forward(*args, **kwargs)
+        output, attns, context = self._forward(*args, **kwargs)
         top_attn = attns[:, 0, :, :].contiguous()
         attn_align = None
         if with_align:
             if self.full_context_alignment:
                 # return _, (B, Q_len, K_len)
-                _, attns = self._forward(*args, **kwargs, future=True)
+                _, attns, _ = self._forward(*args, **kwargs, future=True)
 
             if self.alignment_heads is not None:
                 attns = attns[:, :self.alignment_heads, :, :].contiguous()
@@ -80,7 +80,7 @@ class TransformerDecoderLayer(nn.Module):
             # Case 2: no full_context, 1 align heads -> guided align
             # Case 3: full_context, 1 align heads -> full cte guided align
             attn_align = attns.mean(dim=1)
-        return output, top_attn, attn_align
+        return output, top_attn, attn_align, context
 
     def _forward(self, inputs, memory_bank, src_pad_mask, tgt_pad_mask,
                  layer_cache=None, step=None, future=False):
@@ -137,8 +137,9 @@ class TransformerDecoderLayer(nn.Module):
                                        layer_cache=layer_cache,
                                        attn_type="context")
         output = self.feed_forward(self.drop(mid) + query)
-
-        return output, attns
+        
+        context = mid
+        return output, attns, context
 
     def update_dropout(self, dropout, attention_dropout):
         self.self_attn.update_dropout(attention_dropout)
@@ -274,7 +275,7 @@ class TransformerDecoder(DecoderBase):
         for i, layer in enumerate(self.transformer_layers):
             layer_cache = self.state["cache"]["layer_{}".format(i)] \
                 if step is not None else None
-            output, attn, attn_align = layer(
+            output, attn, attn_align, context = layer(
                 output,
                 src_memory_bank,
                 src_pad_mask,
@@ -297,7 +298,7 @@ class TransformerDecoder(DecoderBase):
             # attns["align"] = torch.stack(attn_aligns, 0).mean(0)  # All avg
 
         # TODO change the way attns is returned dict => list or tuple (onnx)
-        return emb, dec_outs, attns
+        return emb, dec_outs, attns, context
 
     def _init_cache(self, memory_bank):
         self.state["cache"] = {}

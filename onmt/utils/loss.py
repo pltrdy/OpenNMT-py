@@ -85,7 +85,13 @@ def build_loss_compute(model, tgt_field, opt, train=True):
             lambda_align=opt.lambda_align)
 
     if abstract:
-        compute = onmt.modules.abstractive_generator.AbstractiveLossCompute(compute)
+        abstract_metric = getattr(opt, "abstract_metric", "cosine")
+        compute = onmt.modules.abstractive_generator.AbstractiveLossCompute(
+            compute,
+            abstract_metric=abstract_metric
+        )
+        # compute = onmt.modules.abstractive_generator.LossWrapper(compute)
+        pass
     compute.to(device)
     compute._embeddings = model.decoder.embeddings
     return compute
@@ -155,7 +161,8 @@ class LossComputeBase(nn.Module):
                  normalization=1.0,
                  shard_size=0,
                  trunc_start=0,
-                 trunc_size=None):
+                 trunc_size=None,
+                 decoder_context=None):
         """Compute the forward loss, possibly in shards in which case this
         method also runs the backward pass and returns ``None`` as the loss
         value.
@@ -186,7 +193,7 @@ class LossComputeBase(nn.Module):
         if trunc_size is None:
             trunc_size = batch.tgt.size(0) - trunc_start
         trunc_range = (trunc_start, trunc_start + trunc_size)
-        shard_state = self._make_shard_state(src_embs, tgt_embs, batch, output, trunc_range, attns)
+        shard_state = self._make_shard_state(src_embs, tgt_embs, batch, output, trunc_range, attns, decoder_context=decoder_context)
         if shard_size == 0:
             loss, stats = self._compute_loss(batch, **shard_state)
             return loss / float(normalization), stats
@@ -261,11 +268,12 @@ class NMTLossCompute(LossComputeBase):
         self.lambda_coverage = lambda_coverage
         self.lambda_align = lambda_align
 
-    def _make_shard_state(self, src_embs, tgt_embs, batch, output, range_, attns=None):
+    def _make_shard_state(self, src_embs, tgt_embs, batch, output, range_, attns=None, decoder_context=None):
         std = attns.get("std", None)
         shard_state = {
             "src_embs": src_embs,
             "tgt_embs": tgt_embs,
+            "decoder_context": decoder_context,
             "output": output,
             "target": batch.tgt[range_[0] + 1: range_[1], :, 0],
             "std_attn": std

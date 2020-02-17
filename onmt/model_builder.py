@@ -172,7 +172,6 @@ def build_base_model(model_opt, fields, gpu, checkpoint=None, gpu_id=None):
     model = onmt.models.NMTModel(encoder, decoder)
 
     importance = getattr(model_opt, "importance", False)
-    abstract = getattr(model_opt, "abstract", False)
 
     # Build Generator.
     if not model_opt.copy_attn:
@@ -193,7 +192,7 @@ def build_base_model(model_opt, fields, gpu, checkpoint=None, gpu_id=None):
         tgt_base_field = fields["tgt"].base_field
         vocab_size = len(tgt_base_field.vocab)
         pad_idx = tgt_base_field.vocab.stoi[tgt_base_field.pad_token]
-        assert not (abstract and importance)
+        
         if importance:
             generator_class = onmt.modules.importance_loss.ImportanceGenerator
         else:
