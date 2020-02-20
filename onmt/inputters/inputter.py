@@ -9,6 +9,7 @@ from itertools import chain, cycle
 
 import torch
 import torchtext.data
+import onmt
 from torchtext.data import Field, RawField, LabelField
 from torchtext.vocab import Vocab
 from torchtext.data.utils import RandomShuffler
@@ -751,7 +752,9 @@ class DatasetLazyIter(object):
 
     def __init__(self, dataset_paths, fields, batch_size, batch_size_fn,
                  batch_size_multiple, device, is_train, pool_factor,
-                 repeat=True, num_batches_multiple=1, yield_raw_example=False):
+                 repeat=True, num_batches_multiple=1, yield_raw_example=False,
+                 src_noise_prob=[],
+                 src_noise=[]):
         self._paths = dataset_paths
         self.fields = fields
         self.batch_size = batch_size
@@ -763,6 +766,11 @@ class DatasetLazyIter(object):
         self.num_batches_multiple = num_batches_multiple
         self.yield_raw_example = yield_raw_example
         self.pool_factor = pool_factor
+
+        if len(src_noise) > 0:
+            self.src_noise = onmt.inputters.source_noise.MultiNoise(src_noise, src_noise_prob)
+        else:
+            self.src_noise = None
 
     def _iter_dataset(self, path):
         logger.info('Loading dataset from %s' % path)
@@ -784,7 +792,8 @@ class DatasetLazyIter(object):
         )
         for batch in cur_iter:
             self.dataset = cur_iter.dataset
-            yield batch
+            yield self.maybe_noise_batch(batch)
+            # yield batch
 
         # NOTE: This is causing some issues for consumer/producer,
         # as we may still have some of those examples in some queue
@@ -792,6 +801,11 @@ class DatasetLazyIter(object):
         # gc.collect()
         # del cur_dataset
         # gc.collect()
+
+    def maybe_noise_batch(self, batch):
+        if self.src_noise is None:
+            return batch
+        return self.source_noise.noise_batch(batch)
 
     def __iter__(self):
         num_batches = 0
@@ -874,7 +888,9 @@ def build_dataset_iter(corpus_type, fields, opt, is_train=True, multi=False):
         opt.pool_factor,
         repeat=not opt.single_pass,
         num_batches_multiple=max(opt.accum_count) * opt.world_size,
-        yield_raw_example=multi)
+        yield_raw_example=multi,
+        src_noise_prob=opt.src_noise_prob if is_train else [],
+        src_noise=opt.src_noise if is_train else [])
 
 
 def build_dataset_iter_multiple(train_shards, fields, opt):
