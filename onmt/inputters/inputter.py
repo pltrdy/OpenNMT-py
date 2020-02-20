@@ -6,6 +6,9 @@ import math
 from collections import Counter, defaultdict, OrderedDict
 
 import torch
+import torchtext.data
+import onmt
+
 from torchtext.data import Field, RawField, LabelField
 from torchtext.vocab import Vocab
 
@@ -491,3 +494,4 @@ def _read_vocab_file(vocab_path, tag):
             else:
                 vocab = [line.strip().split()[0] for line in lines]
             return vocab, has_count
+
