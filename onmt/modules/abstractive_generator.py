@@ -78,11 +78,12 @@ class LossWrapper(LossComputeBase):
         return loss, stats
 
 class AbstractiveLossCompute(LossWrapper):
-    def __init__(self, base_loss, abstract_metric="cosine"):
+    def __init__(self, base_loss, abstract_metric="cosine", abstract_lambda=1.0):
         super(AbstractiveLossCompute, self).__init__(base_loss)
         self.agg = torch.sum
         self.cosine_similarity = torch.nn.functional.cosine_similarity
         self.metric = abstract_metric
+        self.abstract_lambda = abstract_lambda
         
     def _mask(self, t, lengths):
         masked = t * 1.0
@@ -106,7 +107,7 @@ class AbstractiveLossCompute(LossWrapper):
                    std_attn=std_attn, coverage_attn=coverage_attn, decoder_context=decoder_context, **kwargs)
 
         if not self.metric == "monitor":
-            loss += abs_loss
+            loss = (loss * self.abstract_lambda) + abs_loss
             stats.abs_loss += abs_loss.item()
         return loss, stats
     
@@ -126,6 +127,34 @@ class AbstractiveLossCompute(LossWrapper):
 
         stats.update_additional_metrics(results)
         return None
+    
+    def output_cosine(self, *args, **kwargs):
+        sim_fct = self.cosine_similarity
+        return self._output_loss(sim_fct, *args, **kwargs)
+
+    def output_xent(self, *args, **kwargs):
+        sim_fct = vec_cross_entropy
+        return self._output_loss(sim_fct, *args, **kwargs)
+
+    def _output_loss(self, sim_fct, loss, stats, batch, src_embs, tgt_embs, output, target, tgt_lens,
+                  std_attn=None, coverage_attn=None, decoder_context=None, **kwargs):
+        tgt_embs = tgt_embs[1:]
+        output = output[:-1]
+        tgt_lens -= 1
+        
+        n, b, d = tgt_embs.size()
+        def _bottle(t):
+            """ from [n x b x d] 
+                to   [b x (n*d)]
+            """
+            return t.transpose(0, 1).contiguous().view(b, (n*d)).contiguous()
+
+        bott_tgt_embs = _bottle(self._mask(tgt_embs, tgt_lens))
+        bott_out_embs = _bottle(self._mask(output, tgt_lens))
+
+        out_sim = sim_fct(bott_out_embs, bott_tgt_embs)
+        abs_loss = (out_sim * tgt_lens.float()).sum()
+        return abs_loss
 
     def context_cosine(self, *args, **kwargs):
         sim_fct = self.cosine_similarity
@@ -137,45 +166,45 @@ class AbstractiveLossCompute(LossWrapper):
 
     def _context_loss(self, sim_fct, loss, stats, batch, src_embs, tgt_embs, output, target, tgt_lens,
                       std_attn=None, coverage_attn=None, decoder_context=None, **kwargs):
-            assert decoder_context is not None
-            tgt_embs = tgt_embs[1:]
-            output = output[:-1]
-            tgt_lens -= 1
-            src_embs = decoder_context.transpose(0, 1)[:-1].contiguous()
+        assert decoder_context is not None
+        tgt_embs = tgt_embs[1:]
+        output = output[:-1]
+        tgt_lens -= 1
+        src_embs = decoder_context.transpose(0, 1)[:-1].contiguous()
 
-            assert_size(src_embs, tgt_embs)
-            assert_size(src_embs, output)
+        assert_size(src_embs, tgt_embs)
+        assert_size(src_embs, output)
 
-            n, b, d = src_embs.size()
-            def _bottle(t):
-                """ from [n x b x d] 
-                    to   [b x (n*d)]
-                """
-                return t.transpose(0, 1).contiguous().view(b, (n*d)).contiguous()
-           
-            # need masking after cosine, not before
-            bott_src_embs = _bottle(self._mask(src_embs, tgt_lens))
-            bott_tgt_embs = _bottle(self._mask(tgt_embs, tgt_lens))
-            bott_out_embs = _bottle(self._mask(output, tgt_lens))
-            
-            assert_size(bott_src_embs, bott_tgt_embs)
-            assert_size(bott_src_embs, bott_out_embs)
-          
-            # tgt_sim = _unbottle(sim_fct(bott_tgt_embs, bott_src_embs), dim=1)
-            # out_sim = _unbottle(sim_fct(bott_out_embs, bott_src_embs), dim=1)
-            
-            tgt_sim = sim_fct(bott_tgt_embs, bott_src_embs)
-            out_sim = sim_fct(bott_out_embs, bott_src_embs)
+        n, b, d = src_embs.size()
+        def _bottle(t):
+            """ from [n x b x d] 
+                to   [b x (n*d)]
+            """
+            return t.transpose(0, 1).contiguous().view(b, (n*d)).contiguous()
+       
+        # need masking after cosine, not before
+        bott_src_embs = _bottle(self._mask(src_embs, tgt_lens))
+        bott_tgt_embs = _bottle(self._mask(tgt_embs, tgt_lens))
+        bott_out_embs = _bottle(self._mask(output, tgt_lens))
+        
+        assert_size(bott_src_embs, bott_tgt_embs)
+        assert_size(bott_src_embs, bott_out_embs)
+      
+        # tgt_sim = _unbottle(sim_fct(bott_tgt_embs, bott_src_embs), dim=1)
+        # out_sim = _unbottle(sim_fct(bott_out_embs, bott_src_embs), dim=1)
+        
+        tgt_sim = sim_fct(bott_tgt_embs, bott_src_embs)
+        out_sim = sim_fct(bott_out_embs, bott_src_embs)
 
 
-            # masked_tgt_sim = _mask(tgt_sim, tgt_lens)
-            # masked_out_sim = _mask(out_sim, tgt_lens)
-            masked_tgt_sim = tgt_sim
-            masked_out_sim = out_sim
+        # masked_tgt_sim = _mask(tgt_sim, tgt_lens)
+        # masked_out_sim = _mask(out_sim, tgt_lens)
+        masked_tgt_sim = tgt_sim
+        masked_out_sim = out_sim
 
-            delta_sim = torch.exp(torch.abs(masked_out_sim - masked_tgt_sim))
-            abs_loss = (delta_sim * tgt_lens.float()).sum()
-            return abs_loss
+        delta_sim = torch.exp(torch.abs(masked_out_sim - masked_tgt_sim))
+        abs_loss = (delta_sim * tgt_lens.float()).sum()
+        return abs_loss
 
     def shifted_cosine(self, loss, stats, batch, src_embs, tgt_embs, output, target, tgt_lens,
                       std_attn=None, coverage_attn=None, decoder_context=None, **kwargs):
@@ -208,4 +237,4 @@ class AbstractiveLossCompute(LossWrapper):
         abs_loss = (delta_sim * tgt_lens.float()).sum()
     
         return loss
-
+       
