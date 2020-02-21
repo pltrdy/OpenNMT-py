@@ -41,6 +41,15 @@ Vocab.__getstate__ = _getstate
 Vocab.__setstate__ = _setstate
 
 
+# def make_noise_field(data):
+#     field_max = max([t.size(0) for t in data])
+# 
+#     padded = torch.zeros([len(data), field_max],
+#                          dtype=data[0].dtype, device=data[0].device)
+#     for i, t in enumerate(data):
+#         padded[i, :len(t)] += t
+#     return padded
+
 def make_src(data, vocab):
     src_size = max([t.size(0) for t in data])
     src_vocab_size = max([t.max() for t in data]) + 1
@@ -80,7 +89,6 @@ class AlignField(LabelField):
         align_idx = torch.tensor(sparse_idx, dtype=self.dtype, device=device)
 
         return align_idx
-
 
 def parse_align_idx(align_pharaoh):
     """
@@ -191,6 +199,13 @@ def get_fields(
     if with_align:
         word_align = AlignField()
         fields["align"] = word_align
+
+    # fields["is_word_start"] = RawField(postprocessing=make_noise_field)
+    # fields["is_end_of_sentence"] = RawField(postprocessing=make_noise_field)
+    # fields["noise_skip"] = RawField(postprocessing=make_noise_field)
+    
+    fields["is_word_start"] = RawField()
+    fields["is_end_of_sentence"] = RawField()
 
     return fields
 
@@ -402,6 +417,7 @@ def _build_fields_vocab(fields, counters, data_type, share_vocab,
             build_fv_args,
             fixed_vocab=fixed_vocab,
             size_multiple=vocab_size_multiple if not share_vocab else 1)
+
         if share_vocab:
             # `tgt_vocab_size` is ignored when sharing vocabularies
             logger.info(" * merging src and tgt vocab...")
@@ -412,8 +428,32 @@ def _build_fields_vocab(fields, counters, data_type, share_vocab,
                 min_freq=src_words_min_frequency,
                 vocab_size_multiple=vocab_size_multiple)
             logger.info(" * merged vocab size: %d." % len(src_field.vocab))
-
+    
+    build_noise_field(src_multifield.base_field)
     return fields
+
+def build_noise_field(src_field, subword=True, subword_prefix="▁", sentence_breaks=[".", "?", "!"]):
+    """In place add noise related fields i.e.:
+         - word_start
+         - end_of_sentence
+    """
+    is_word_start = lambda x: True
+    if subword:
+        is_word_start = lambda x: x.startswith(subword_prefix)
+        sentence_breaks = [subword_prefix + t for t in sentence_breaks]
+
+    vocab_size = len(src_field.vocab)
+    word_start_mask = torch.zeros([vocab_size]).bool()
+    end_of_sentence_mask = torch.zeros([vocab_size]).bool()
+    for i, t in enumerate(src_field.vocab.itos):
+        if is_word_start(t):
+            word_start_mask[i] = True
+        if t in sentence_breaks:
+            end_of_sentence_mask[i] = True
+    src_field.word_start_mask = word_start_mask
+    src_field.end_of_sentence_mask = end_of_sentence_mask
+        
+        
 
 
 def build_vocab(train_dataset_files, fields, data_type, share_vocab,
@@ -753,8 +793,7 @@ class DatasetLazyIter(object):
     def __init__(self, dataset_paths, fields, batch_size, batch_size_fn,
                  batch_size_multiple, device, is_train, pool_factor,
                  repeat=True, num_batches_multiple=1, yield_raw_example=False,
-                 src_noise_prob=[],
-                 src_noise=[]):
+                 ):
         self._paths = dataset_paths
         self.fields = fields
         self.batch_size = batch_size
@@ -766,11 +805,6 @@ class DatasetLazyIter(object):
         self.num_batches_multiple = num_batches_multiple
         self.yield_raw_example = yield_raw_example
         self.pool_factor = pool_factor
-
-        if len(src_noise) > 0:
-            self.src_noise = onmt.inputters.source_noise.MultiNoise(src_noise, src_noise_prob)
-        else:
-            self.src_noise = None
 
     def _iter_dataset(self, path):
         logger.info('Loading dataset from %s' % path)
@@ -792,8 +826,7 @@ class DatasetLazyIter(object):
         )
         for batch in cur_iter:
             self.dataset = cur_iter.dataset
-            yield self.maybe_noise_batch(batch)
-            # yield batch
+            yield batch
 
         # NOTE: This is causing some issues for consumer/producer,
         # as we may still have some of those examples in some queue
@@ -801,11 +834,6 @@ class DatasetLazyIter(object):
         # gc.collect()
         # del cur_dataset
         # gc.collect()
-
-    def maybe_noise_batch(self, batch):
-        if self.src_noise is None:
-            return batch
-        return self.source_noise.noise_batch(batch)
 
     def __iter__(self):
         num_batches = 0
@@ -888,9 +916,7 @@ def build_dataset_iter(corpus_type, fields, opt, is_train=True, multi=False):
         opt.pool_factor,
         repeat=not opt.single_pass,
         num_batches_multiple=max(opt.accum_count) * opt.world_size,
-        yield_raw_example=multi,
-        src_noise_prob=opt.src_noise_prob if is_train else [],
-        src_noise=opt.src_noise if is_train else [])
+        yield_raw_example=multi)
 
 
 def build_dataset_iter_multiple(train_shards, fields, opt):
