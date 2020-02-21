@@ -12,6 +12,7 @@ from onmt.modules.average_attn import AverageAttention
 
 import onmt.modules.importance_loss # noqa
 import onmt.modules.abstractive_generator # noqa
+import onmt.modules.source_noise # noqa
 
 __all__ = ["Elementwise", "context_gate_factory", "ContextGate",
            "GlobalAttention", "ConvMultiStepAttention", "CopyGenerator",

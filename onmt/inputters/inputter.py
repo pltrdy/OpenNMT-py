@@ -35,6 +35,15 @@ Vocab.__getstate__ = _getstate
 Vocab.__setstate__ = _setstate
 
 
+# def make_noise_field(data):
+#     field_max = max([t.size(0) for t in data])
+# 
+#     padded = torch.zeros([len(data), field_max],
+#                          dtype=data[0].dtype, device=data[0].device)
+#     for i, t in enumerate(data):
+#         padded[i, :len(t)] += t
+#     return padded
+
 def make_src(data, vocab):
     src_size = max([t.size(0) for t in data])
     src_vocab_size = max([t.max() for t in data]) + 1
@@ -75,7 +84,6 @@ class AlignField(LabelField):
         align_idx = torch.tensor(sparse_idx, dtype=self.dtype, device=device)
 
         return align_idx
-
 
 def parse_align_idx(align_pharaoh):
     """
@@ -180,6 +188,13 @@ def get_fields(
     if with_align:
         word_align = AlignField()
         fields["align"] = word_align
+
+    # fields["is_word_start"] = RawField(postprocessing=make_noise_field)
+    # fields["is_end_of_sentence"] = RawField(postprocessing=make_noise_field)
+    # fields["noise_skip"] = RawField(postprocessing=make_noise_field)
+    
+    fields["is_word_start"] = RawField()
+    fields["is_end_of_sentence"] = RawField()
 
     return fields
 
@@ -346,8 +361,32 @@ def _build_fields_vocab(fields, counters, data_type, share_vocab,
                 vocab_size_multiple=vocab_size_multiple,
                 specials=_all_specials)
             logger.info(" * merged vocab size: %d." % len(src_field.vocab))
-
+    
+    build_noise_field(src_multifield.base_field)
     return fields
+
+def build_noise_field(src_field, subword=True, subword_prefix="▁", sentence_breaks=[".", "?", "!"]):
+    """In place add noise related fields i.e.:
+         - word_start
+         - end_of_sentence
+    """
+    is_word_start = lambda x: True
+    if subword:
+        is_word_start = lambda x: x.startswith(subword_prefix)
+        sentence_breaks = [subword_prefix + t for t in sentence_breaks]
+
+    vocab_size = len(src_field.vocab)
+    word_start_mask = torch.zeros([vocab_size]).bool()
+    end_of_sentence_mask = torch.zeros([vocab_size]).bool()
+    for i, t in enumerate(src_field.vocab.itos):
+        if is_word_start(t):
+            word_start_mask[i] = True
+        if t in sentence_breaks:
+            end_of_sentence_mask[i] = True
+    src_field.word_start_mask = word_start_mask
+    src_field.end_of_sentence_mask = end_of_sentence_mask
+        
+        
 
 
 def build_vocab(train_dataset_files, fields, data_type, share_vocab,
@@ -494,4 +533,3 @@ def _read_vocab_file(vocab_path, tag):
             else:
                 vocab = [line.strip().split()[0] for line in lines]
             return vocab, has_count
-
