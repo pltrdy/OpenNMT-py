@@ -9,8 +9,6 @@ from onmt.inputters.dataset_base import Dataset
 from onmt.inputters.text_dataset import text_sort_key, TextDataReader
 from onmt.inputters.datareader_base import DataReaderBase
 
-import onmt.inputters.source_noise # noqa
-
 str2reader = {
     "text": TextDataReader}
 str2sortkey = {
