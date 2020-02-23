@@ -193,8 +193,8 @@ def get_fields(
     # fields["is_end_of_sentence"] = RawField(postprocessing=make_noise_field)
     # fields["noise_skip"] = RawField(postprocessing=make_noise_field)
     
-    fields["is_word_start"] = RawField()
-    fields["is_end_of_sentence"] = RawField()
+    # fields["is_word_start"] = RawField()
+    # fields["is_end_of_sentence"] = RawField()
 
     return fields
 

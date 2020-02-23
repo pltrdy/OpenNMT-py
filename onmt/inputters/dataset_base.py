@@ -21,37 +21,37 @@ def _join_dicts(*args):
     return dict(chain(*[d.items() for d in args]))
 
 
-def _noise_fields(example, src_field, skip_first=1, word_prefix="▁"):
-    src = src_field.tokenize(example["src"])
-    sentence_breaks = [word_prefix + _ for _ in [".", "?", "!"]]
-
-    tot_len = len(src)
-    skipped = src[:skip_first]
-    src = src[skip_first:]
-    
-    is_word_start = torch.tensor([
-        w.startswith(word_prefix)
-        for w in src
-    ])
-    
-    is_endofsen = torch.tensor([
-        w in sentence_breaks
-        for w in src
-    ])
-
-    assert all([
-        len(_) == (tot_len-skip_first) for _ in [is_word_start, is_endofsen]
-    ])    
-
-    example["is_word_start"] = is_word_start
-    example["is_end_of_sentence"] = is_endofsen
-    
-    # print(len(src))
-    # print(example["is_word_start"].size())
-    # print([_.item() for _ in is_word_start])
-    # print([_.item() for _ in is_endofsen])
-    # raise ValueError()
-    return example
+# def _noise_fields(example, src_field, skip_first=1, word_prefix="▁"):
+#     src = src_field.tokenize(example["src"])
+#     sentence_breaks = [word_prefix + _ for _ in [".", "?", "!"]]
+# 
+#     tot_len = len(src)
+#     skipped = src[:skip_first]
+#     src = src[skip_first:]
+#     
+#     is_word_start = torch.tensor([
+#         w.startswith(word_prefix)
+#         for w in src
+#     ])
+#     
+#     is_endofsen = torch.tensor([
+#         w in sentence_breaks
+#         for w in src
+#     ])
+# 
+#     assert all([
+#         len(_) == (tot_len-skip_first) for _ in [is_word_start, is_endofsen]
+#     ])    
+# 
+#     example["is_word_start"] = is_word_start
+#     example["is_end_of_sentence"] = is_endofsen
+#     
+#     # print(len(src))
+#     # print(example["is_word_start"].size())
+#     # print([_.item() for _ in is_word_start])
+#     # print([_.item() for _ in is_endofsen])
+#     # raise ValueError()
+#     return example
 
 def _dynamic_dict(example, src_field, tgt_field):
     """Create copy-vocab and numericalize with it.
@@ -147,7 +147,7 @@ class Dataset(TorchtextDataset):
         self.src_vocabs = []
         examples = []
         for ex_dict in starmap(_join_dicts, zip(*read_iters)):
-            ex_dict = _noise_fields(ex_dict, fields['src'].base_field)
+            # ex_dict = _noise_fields(ex_dict, fields['src'].base_field)
 
             if can_copy:
                 src_field = fields['src']
