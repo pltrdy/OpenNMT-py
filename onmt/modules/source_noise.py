@@ -50,10 +50,6 @@ class NoiseBase(object):
                 pad = pad.unsqueeze(1).expand(-1, 15).unsqueeze(2)
 
                 source = torch.cat([source, source])
-                # noise_skip = torch.cat([noise_skip, pad.expand_as(noise_skip)])
-                # mask = torch.cat([mask, pad.expand_as(mask)])
-
-            # print(source.size(), source[self.skip_first:self.skip_first+noisy_tokens.size(0), i, 0].size(), noisy_tokens.size())
             source[:noisy_tokens.size(0), i, 0] = noisy_tokens
 
         source = torch.cat([skipped, source])
@@ -65,7 +61,7 @@ class NoiseBase(object):
         batch.src = source, lengths
         return batch
 
-    def noise_source(source, **kwargs):
+    def noise_source(self, source, **kwargs):
         raise NotImplementedError()
 
 
@@ -174,8 +170,6 @@ class InfillingNoise(NoiseBase):
         # assert source.size() == is_word_start.size()
         # aeq(source.eq(self.pad_idx).long().sum(), 0)
 
-        initial_length = source.size(0)
-
         # we manually add this hypothesis since it's required for the rest
         # of the function and kindof make sense
         is_word_start[-1] = 0
@@ -193,8 +187,11 @@ class InfillingNoise(NoiseBase):
             # Make sure we have enough to mask
             cum_length = torch.cumsum(lengths, 0)
             while cum_length[-1] < num_to_mask:
-                lengths = torch.cat([lengths, self.mask_span_distribution.sample(
-                    sample_shape=(num_to_mask,))], dim=0)
+                lengths = torch.cat([
+                    lengths,
+                    self.mask_span_distribution.sample(
+                        sample_shape=(num_to_mask,))
+                ], dim=0)
                 cum_length = torch.cumsum(lengths, 0)
 
             # Trim to masking budget
@@ -221,9 +218,6 @@ class InfillingNoise(NoiseBase):
         indices = word_starts[torch.randperm(word_starts.size(0))[
             :num_to_mask]].squeeze(1)
 
-        # random ratio disabled
-        # mask_random = torch.FloatTensor(num_to_mask).uniform_() < self.random_ratio
-
         source_length = source.size(0)
         # TODO why?
         # assert source_length - 1 not in indices
@@ -241,7 +235,8 @@ class InfillingNoise(NoiseBase):
             # keep index, but replace it with [MASK]
             source[indices] = self.mask_idx
             # random ratio disabled
-            # source[indices[mask_random]] = torch.randint(1, len(self.vocab), size=(mask_random.sum(),))
+            # source[indices[mask_random]] = torch.randint(
+            #     1, len(self.vocab), size=(mask_random.sum(),))
 
         # if self.mask_span_distribution is not None:
         # assert len(lengths.size()) == 1
@@ -251,7 +246,6 @@ class InfillingNoise(NoiseBase):
             # assert lengths.size() == indices.size()
             lengths -= is_word_start[indices + 1].long()
             uncompleted = lengths >= 0
-            # print("indices: %s, %s, uncomp: %s" % (str(indices.size()), str(indices), str(uncompleted)))
             indices = indices[uncompleted] + 1
 
             # mask_random = mask_random[uncompleted]
@@ -263,7 +257,8 @@ class InfillingNoise(NoiseBase):
                 # keep index, but replace it with [MASK]
                 source[indices] = self.mask_idx
                 # random ratio disabled
-                # source[indices[mask_random]] = torch.randint(1, len(self.vocab), size=(mask_random.sum(),))
+                # source[indices[mask_random]] = torch.randint(
+                #     1, len(self.vocab), size=(mask_random.sum(),))
         # else:
         #     # A bit faster when all lengths are 1
         #     while indices.size(0) > 0:
@@ -276,7 +271,8 @@ class InfillingNoise(NoiseBase):
         #         else:
         #             # keep index, but replace it with [MASK]
         #             source[indices] = self.mask_idx
-        #             source[indices[mask_random]] = torch.randint(1, len(self.vocab), size=(mask_random.sum(),))
+        #             source[indices[mask_random]] = torch.randint(
+        #                 1, len(self.vocab), size=(mask_random.sum(),))
 
         #         assert source_length - 1 not in indices
 
@@ -311,9 +307,9 @@ class InfillingNoise(NoiseBase):
 
         # random ratio disabled
         # num_random = int(math.ceil(n * self.random_ratio))
-        num_random = 0
         result[noise_indices] = self.mask_idx
-        # result[noise_indices[:num_random]] = torch.randint(low=1, high=len(self.vocab), size=(num_random,))
+        # result[noise_indices[:num_random]] = torch.randint(
+        #    low=1, high=len(self.vocab), size=(num_random,))
 
         result[~noise_mask] = tokens
 
