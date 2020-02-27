@@ -35,15 +35,6 @@ Vocab.__getstate__ = _getstate
 Vocab.__setstate__ = _setstate
 
 
-# def make_noise_field(data):
-#     field_max = max([t.size(0) for t in data])
-# 
-#     padded = torch.zeros([len(data), field_max],
-#                          dtype=data[0].dtype, device=data[0].device)
-#     for i, t in enumerate(data):
-#         padded[i, :len(t)] += t
-#     return padded
-
 def make_src(data, vocab):
     src_size = max([t.size(0) for t in data])
     src_vocab_size = max([t.max() for t in data]) + 1
@@ -188,13 +179,6 @@ def get_fields(
     if with_align:
         word_align = AlignField()
         fields["align"] = word_align
-
-    # fields["is_word_start"] = RawField(postprocessing=make_noise_field)
-    # fields["is_end_of_sentence"] = RawField(postprocessing=make_noise_field)
-    # fields["noise_skip"] = RawField(postprocessing=make_noise_field)
-    
-    # fields["is_word_start"] = RawField()
-    # fields["is_end_of_sentence"] = RawField()
 
     return fields
 
