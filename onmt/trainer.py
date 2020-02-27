@@ -69,7 +69,6 @@ def build_trainer(opt, device_id, model, fields, optim, model_saver=None):
             device_id=device_id
         )
 
-
     report_manager = onmt.utils.build_report_manager(opt, gpu_rank)
     trainer = onmt.Trainer(model, train_loss, valid_loss, optim, trunc_size,
                            shard_size, norm_method,
@@ -365,7 +364,7 @@ class Trainer(object):
                 trunc_size = target_size
 
             batch = self.maybe_noise_source(batch)
-            
+
             src, src_lengths = batch.src if isinstance(batch.src, tuple) \
                 else (batch.src, None)
             if src_lengths is not None:

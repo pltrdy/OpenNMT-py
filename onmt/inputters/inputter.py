@@ -7,7 +7,6 @@ from collections import Counter, defaultdict, OrderedDict
 
 import torch
 import torchtext.data
-import onmt
 
 from torchtext.data import Field, RawField, LabelField
 from torchtext.vocab import Vocab
@@ -357,10 +356,11 @@ def build_noise_field(src_field, subword=True,
          - word_start
          - end_of_sentence
     """
-    def is_word_start(x): return True
     if subword:
         def is_word_start(x): return x.startswith(subword_prefix)
         sentence_breaks = [subword_prefix + t for t in sentence_breaks]
+    else:
+        def is_word_start(x): return True
 
     vocab_size = len(src_field.vocab)
     word_start_mask = torch.zeros([vocab_size]).bool()

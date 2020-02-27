@@ -20,6 +20,7 @@ def _join_dicts(*args):
 
     return dict(chain(*[d.items() for d in args]))
 
+
 def _dynamic_dict(example, src_field, tgt_field):
     """Create copy-vocab and numericalize with it.
 
