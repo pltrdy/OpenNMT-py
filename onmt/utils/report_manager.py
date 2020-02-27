@@ -4,6 +4,7 @@ import time
 from datetime import datetime
 
 import onmt
+import os
 
 from onmt.utils.logging import logger
 
@@ -12,9 +13,11 @@ def build_report_manager(opt, gpu_rank):
     if opt.tensorboard and gpu_rank == 0:
         from torch.utils.tensorboard import SummaryWriter
         tensorboard_log_dir = opt.tensorboard_log_dir
-
+        
+        name = os.path.basename(opt.save_model)
         if not opt.train_from:
-            tensorboard_log_dir += datetime.now().strftime("/%b-%d_%H-%M-%S")
+            tensorboard_log_dir += "%s_%s" % (
+                name, datetime.now().strftime("/%b-%d_%H-%M-%S"))
 
         writer = SummaryWriter(tensorboard_log_dir, comment="Unmt")
     else:
