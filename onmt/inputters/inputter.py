@@ -76,6 +76,7 @@ class AlignField(LabelField):
 
         return align_idx
 
+
 def parse_align_idx(align_pharaoh):
     """
     Parse Pharaoh alignment into [[<src>, <tgt>], ...]
@@ -345,18 +346,20 @@ def _build_fields_vocab(fields, counters, data_type, share_vocab,
                 vocab_size_multiple=vocab_size_multiple,
                 specials=_all_specials)
             logger.info(" * merged vocab size: %d." % len(src_field.vocab))
-    
+
     build_noise_field(src_multifield.base_field)
     return fields
 
-def build_noise_field(src_field, subword=True, subword_prefix="▁", sentence_breaks=[".", "?", "!"]):
+
+def build_noise_field(src_field, subword=True,
+                      subword_prefix="▁", sentence_breaks=[".", "?", "!"]):
     """In place add noise related fields i.e.:
          - word_start
          - end_of_sentence
     """
-    is_word_start = lambda x: True
+    def is_word_start(x): return True
     if subword:
-        is_word_start = lambda x: x.startswith(subword_prefix)
+        def is_word_start(x): return x.startswith(subword_prefix)
         sentence_breaks = [subword_prefix + t for t in sentence_breaks]
 
     vocab_size = len(src_field.vocab)
@@ -369,8 +372,6 @@ def build_noise_field(src_field, subword=True, subword_prefix="▁", sentence_br
             end_of_sentence_mask[i] = True
     src_field.word_start_mask = word_start_mask
     src_field.end_of_sentence_mask = end_of_sentence_mask
-        
-        
 
 
 def build_vocab(train_dataset_files, fields, data_type, share_vocab,
