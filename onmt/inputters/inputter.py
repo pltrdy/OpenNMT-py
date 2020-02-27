@@ -346,7 +346,7 @@ def _build_fields_vocab(fields, counters, data_type, share_vocab,
                 specials=_all_specials)
             logger.info(" * merged vocab size: %d." % len(src_field.vocab))
 
-    build_noise_field(src_multifield.base_field)
+        build_noise_field(src_multifield.base_field)
     return fields
 
 
