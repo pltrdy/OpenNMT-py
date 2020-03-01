@@ -337,11 +337,12 @@ def _pad_vocab_to_multiple(vocab, multiple):
 
 
 def _build_field_vocab(field, counter, fixed_vocab=False, size_multiple=1,
-                       **kwargs):
+                       opt_specials=[], **kwargs):
     # this is basically copy-pasted from torchtext.
     all_specials = [
         field.unk_token, field.pad_token, field.init_token, field.eos_token
     ]
+    all_specials.extend(opt_specials)
     if fixed_vocab:
         print("FIXED VOCAB!")
         specials = []
@@ -381,12 +382,15 @@ def _build_fields_vocab(fields, counters, data_type, share_vocab,
                         vocab_size_multiple,
                         src_vocab_size, src_words_min_frequency,
                         tgt_vocab_size, tgt_words_min_frequency,
-                        fixed_vocab=False):
+                        fixed_vocab=False,
+                        opt_specials=[]):
     build_fv_args = defaultdict(dict)
     build_fv_args["src"] = dict(
-        max_size=src_vocab_size, min_freq=src_words_min_frequency)
+        max_size=src_vocab_size, min_freq=src_words_min_frequency,
+        opt_specials=opt_specials)
     build_fv_args["tgt"] = dict(
-        max_size=tgt_vocab_size, min_freq=tgt_words_min_frequency)
+        max_size=tgt_vocab_size, min_freq=tgt_words_min_frequency,
+        opt_specials=opt_specials)
     tgt_multifield = fields["tgt"]
     _build_fv_from_multifield(
         tgt_multifield,
@@ -414,6 +418,7 @@ def _build_fields_vocab(fields, counters, data_type, share_vocab,
                 vocab_size_multiple=vocab_size_multiple)
             logger.info(" * merged vocab size: %d." % len(src_field.vocab))
 
+        src_multifield.base_field.vocab
         build_noise_field(src_multifield.base_field)
     return fields
 
@@ -710,6 +715,7 @@ class MultipleDatasetIterator(object):
     This takes a list of iterable objects (DatasetLazyIter) and their
     respective weights, and yields a batch in the wanted proportions.
     """
+
     def __init__(self,
                  train_shards,
                  fields,

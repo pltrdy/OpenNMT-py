@@ -210,7 +210,8 @@ def build_save_dataset(corpus_type, fields, src_reader, tgt_reader,
                 opt.share_vocab, opt.vocab_size_multiple,
                 opt.src_vocab_size, opt.src_words_min_frequency,
                 opt.tgt_vocab_size, opt.tgt_words_min_frequency,
-                fixed_vocab=opt.fixed_vocab)
+                fixed_vocab=opt.fixed_vocab,
+                opt_specials=opt.specials)
         else:
             fields = existing_fields
         torch.save(fields, vocab_path)
