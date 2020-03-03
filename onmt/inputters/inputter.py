@@ -342,6 +342,7 @@ def _build_field_vocab(field, counter, fixed_vocab=False, size_multiple=1,
     all_specials = [
         field.unk_token, field.pad_token, field.init_token, field.eos_token
     ]
+    
     all_specials.extend(opt_specials)
     if fixed_vocab:
         print("FIXED VOCAB!")
@@ -415,7 +416,8 @@ def _build_fields_vocab(fields, counters, data_type, share_vocab,
             _merge_field_vocabs(
                 src_field, tgt_field, vocab_size=src_vocab_size,
                 min_freq=src_words_min_frequency,
-                vocab_size_multiple=vocab_size_multiple)
+                vocab_size_multiple=vocab_size_multiple,
+                opt_specials=opt_specials)
             logger.info(" * merged vocab size: %d." % len(src_field.vocab))
 
         src_multifield.base_field.vocab
@@ -544,11 +546,14 @@ def build_vocab(train_dataset_files, fields, data_type, share_vocab,
 
 
 def _merge_field_vocabs(src_field, tgt_field, vocab_size, min_freq,
-                        vocab_size_multiple):
+                        vocab_size_multiple,
+                        opt_specials=[]):
     # in the long run, shouldn't it be possible to do this by calling
     # build_vocab with both the src and tgt data?
     specials = [tgt_field.unk_token, tgt_field.pad_token,
                 tgt_field.init_token, tgt_field.eos_token]
+    specials.extend(opt_specials)
+
     merged = sum(
         [src_field.vocab.freqs, tgt_field.vocab.freqs], Counter()
     )

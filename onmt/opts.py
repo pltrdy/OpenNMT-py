@@ -296,7 +296,7 @@ def preprocess_opts(parser):
               help="Share source and target vocabulary")
     group.add('--fixed_vocab', '-fixed_vocab', action='store_true',
               help="Do not modify the passed in vocab")
-    group.add("--specials", "-specials", nargs="+", default=[])
+    group.add("--specials", "-specials", type=str, nargs="+", default=[])
 
     # Truncation options, for text corpus
     group = parser.add_argument_group('Pruning')
