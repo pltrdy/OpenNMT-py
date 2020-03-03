@@ -317,11 +317,37 @@ class InfillingNoise(NoiseBase):
         return result
 
 
+class ReplacePositions(NoiseBase):
+    def __init__(self, probs, positions=[], replace_with_id=[], **kwargs):
+        super(MultiNoise, self).__init__(probs, **kwargs)
+        
+        assert len(positions) > 0
+        assert len(replace_with_id) == len(positions)
+        assert len(probs) == len(positions)
+        
+        self.positions = positions
+        self.replace_with_id = replace_with_id
+
+    def noise_source(self, source, length=None):
+        r = torch.rand(len(probs))
+        mask = r.lt(torch.tensor(probs))
+
+        # add `replace_with_id` or 0
+        add_value = torch.tensor(replace_with_id) * mask.long()
+
+        # positions to be replaced = 0
+        source[positions] *= (~mask).long()
+
+        source.index_add_(0, torch.tensor(positions), add_value)
+
+        return source, length
+
 class MultiNoise(NoiseBase):
     NOISES = {
         "sen_shuffling": SenShufflingNoise,
         "infilling": InfillingNoise,
-        "mask": MaskNoise
+        "mask": MaskNoise,
+        "replace": ReplacePositions,
     }
 
     def __init__(self, noises=[], probs=[], **kwargs):
