@@ -56,11 +56,13 @@ def train(opt):
         train_iter = build_dataset_iter(shard_base, fields, opt)
 
     nb_gpu = len(opt.gpu_ranks)
-
+    init_logger(opt.log_file)
     if opt.world_size > 1:
         queues = []
         mp = torch.multiprocessing.get_context('spawn')
-        semaphore = mp.Semaphore(opt.world_size * opt.queue_size)
+        # semaphore = mp.Semaphore(opt.world_size * opt.queue_size)
+        semaphore = None
+
         # Create a thread to listen for errors in the child processes.
         error_queue = mp.SimpleQueue()
         error_handler = ErrorHandler(error_queue)
@@ -74,15 +76,35 @@ def train(opt):
             procs[device_id].start()
             logger.info(" Starting process pid: %d  " % procs[device_id].pid)
             error_handler.add_child(procs[device_id].pid)
-        producer = mp.Process(target=batch_producer,
-                              args=(train_iter, queues, semaphore, opt,),
-                              daemon=True)
-        producer.start()
-        error_handler.add_child(producer.pid)
 
-        for p in procs:
-            p.join()
-        producer.terminate()
+        def start_producer():
+            producer = mp.Process(target=batch_producer,
+                                  args=(train_iter, queues, semaphore, opt,),
+                                  daemon=True)
+            producer.start()
+            error_handler.add_child(producer.pid)
+            logger.info("Starting producer: %d" % producer.pid)
+            return producer
+        producer  = start_producer()
+
+        while True:
+            alive = []
+            for i, p in enumerate(procs):
+                p.join(timeout=1)
+                if not p.is_alive():
+                    procs.pop(i)
+                    alive.append(False)
+                else:
+                    alive.append(True)
+            if all([not _ for _ in alive]):
+                producer.terminate()
+            else:
+                producer.join(timeout=1)
+                if not producer.is_alive():
+                    logger.info("\n\n=======================\n\n")
+                    logger.info("PRODUCER IS DEAD, RESTARTING")
+                    logger.info("\n\n=======================\n\n")
+                    producer = start_producer()
 
     elif nb_gpu == 1:  # case 1 GPU only
         single_main(opt, 0)
@@ -109,7 +131,7 @@ def batch_producer(generator_to_serve, queues, semaphore, opt):
 
     def next_batch(device_id):
         new_batch = next(generator_to_serve)
-        semaphore.acquire()
+        # semaphore.acquire()
         return new_batch[1]
 
     b = next_batch(0)

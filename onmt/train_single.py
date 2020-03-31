@@ -44,6 +44,7 @@ def main(opt, device_id, batch_queue=None, semaphore=None):
     # at this point.
     configure_process(opt, device_id)
     init_logger(opt.log_file)
+
     assert len(opt.accum_count) == len(opt.accum_steps), \
         'Number of accum_count values must match number of accum_steps'
     # Load checkpoint if we resume from a previous training.
@@ -113,13 +114,14 @@ def main(opt, device_id, batch_queue=None, semaphore=None):
             train_iter = build_dataset_iter(shard_base, fields, opt)
 
     else:
-        assert semaphore is not None, \
-            "Using batch_queue requires semaphore as well"
+        # assert semaphore is not None, \
+        #     "Using batch_queue requires semaphore as well"
+        pass
 
         def _train_iter():
             while True:
                 batch = batch_queue.get()
-                semaphore.release()
+                # semaphore.release()
                 yield batch
 
         train_iter = _train_iter()
