@@ -8,10 +8,10 @@ def aeq(ref, *args):
 
 
 class NoiseBase(object):
-    def __init__(self, prob, pad_idx=1, device_id="cpu", **kwargs):
+    def __init__(self, prob, pad_idx=1, device_id="cpu", skip_first_n=0, **kwargs):
         self.prob = prob
         self.pad_idx = 1
-        self.skip_first = 1
+        self.skip_first = skip_first_n
         self.device_id = device_id
 
     def __call__(self, batch):
@@ -23,8 +23,15 @@ class NoiseBase(object):
     def noise_batch(self, batch):
         source, lengths = batch.src if isinstance(batch.src, tuple) \
             else (batch.src, [None] * batch.src.size(1))
+
+        batch.orig_src = source.clone()
+        source = source * 1
+
         # noise_skip = batch.noise_skip
         # aeq(len(batch.noise_skip) == source.size(1))
+        
+        # print("SOURCE: ", source[:, :, 0].t())
+        source, lengths = self.noise_full_source(source, lengths)
 
         # source is [src_len x bs x feats]
         skipped = source[:self.skip_first, :, :]
@@ -61,8 +68,11 @@ class NoiseBase(object):
         batch.src = source, lengths
         return batch
 
-    def noise_source(self, source, **kwargs):
-        raise NotImplementedError()
+    def noise_full_source(self, source, length=None, **kwargs):
+        return source, length
+
+    def noise_source(self, source, length=None, **kwargs):
+        return source, length
 
 
 class MaskNoise(NoiseBase):
@@ -318,28 +328,47 @@ class InfillingNoise(NoiseBase):
 
 
 class ReplacePositions(NoiseBase):
-    def __init__(self, probs, positions=[], replace_with_id=[], **kwargs):
-        super(MultiNoise, self).__init__(probs, **kwargs)
-        
-        assert len(positions) > 0
-        assert len(replace_with_id) == len(positions)
-        assert len(probs) == len(positions)
-        
-        self.positions = positions
-        self.replace_with_id = replace_with_id
+    def __init__(self, prob, replace_positions=[], replace_with_id=[], **kwargs):
+        super(ReplacePositions, self).__init__(prob, **kwargs)
+         
+        assert len(replace_positions) > 0
+        assert len(replace_with_id) == len(replace_positions)
 
-    def noise_source(self, source, length=None):
-        r = torch.rand(len(probs))
-        mask = r.lt(torch.tensor(probs))
+        # only work w/ first places
+        # TODO any position
+        assert max(replace_positions) == (len(replace_positions)-1)
+
+        self.replace_with = torch.tensor(replace_with_id,
+                                         device=self.device_id).long()
+        
+        self.positions = torch.tensor(replace_positions,
+                                      device=self.device_id).long()
+
+        # same prob for every positions
+        probs = torch.ones([len(replace_positions)], device=self.device_id)
+        self.probs = (probs * self.prob).detach()
+
+    def noise_full_source(self, source, length=None):
+        probs = self.probs
+        positions = self.positions
+
+        n = len(probs)
+        bs = source.size(1)
+
+        r = torch.rand([n, bs], device=self.device_id)
+        mask = r.lt(probs.view(-1, 1))
 
         # add `replace_with_id` or 0
-        add_value = torch.tensor(replace_with_id) * mask.long()
+        add_value = self.replace_with.view(-1, 1) * mask.long()
 
         # positions to be replaced = 0
-        source[positions] *= (~mask).long()
+        # print("source[p] (%s)" % (str(source[positions].dtype)), source[positions])
+        source[positions, :, 0] *= (~mask).long()
+        source[positions, :, 0] += add_value
 
-        source.index_add_(0, torch.tensor(positions), add_value)
-
+        # print("source: [%d x %d]" % (bs, source.size(0)), source[:, :, 0].t())
+        # print("mask: ", mask)
+        # print("_source: ", _source[:, :, 0].t())
         return source, length
 
 class MultiNoise(NoiseBase):
@@ -362,6 +391,16 @@ class MultiNoise(NoiseBase):
             else:
                 noise = cls(probs[i], **kwargs)
                 self.noises.append(noise)
+            if n == "replace":
+                # Only work w/ first index
+                assert max(noise.positions) == (len(noise.positions)-1)
+                self.skip_first = len(noise.positions)
+
+    def noise_full_source(self, source, length=None, **kwargs):
+        for noise in self.noises:
+            source, length = noise.noise_full_source(
+                source, length=length, **kwargs)
+        return source, length
 
     def noise_source(self, source, length=None, **kwargs):
         for noise in self.noises:

@@ -186,7 +186,7 @@ class CopyGeneratorLossCompute(NMTLossCompute):
         self.tgt_vocab = tgt_vocab
         self.normalize_by_length = normalize_by_length
 
-    def _make_shard_state(self, src_embs, tgt_embs, batch, output, range_, attns):
+    def _make_shard_state(self, src_embs, tgt_embs, batch, output, range_, attns, **kwargs):
         """See base class for args description."""
         if getattr(batch, "alignment", None) is None:
             raise AssertionError("using -copy_attn you need to pass in "

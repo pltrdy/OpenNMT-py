@@ -66,7 +66,9 @@ def build_trainer(opt, device_id, model, fields, optim, model_saver=None):
             pad_idx=fields["src"].base_field.pad_token,
             end_of_sentence_mask=src_field.end_of_sentence_mask,
             word_start_mask=src_field.word_start_mask,
-            device_id=device_id
+            device_id=device_id,
+            replace_positions=opt.replace_positions,
+            replace_with_id=opt.replace_with_id
         )
 
     report_manager = onmt.utils.build_report_manager(opt, gpu_rank)
