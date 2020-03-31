@@ -72,8 +72,9 @@ def main(opt, fields, transforms_cls, checkpoint, device_id,
         _train_iter = _build_train_iter(opt, fields, transforms_cls)
         train_iter = IterOnDevice(_train_iter, device_id)
     else:
-        assert semaphore is not None, \
-            "Using batch_queue requires semaphore as well"
+        # assert semaphore is not None, \
+        #     "Using batch_queue requires semaphore as well"
+        pass
 
         def _train_iter():
             while True:

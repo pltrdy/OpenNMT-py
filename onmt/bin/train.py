@@ -108,12 +108,14 @@ def train(opt):
         checkpoint=checkpoint)
 
     nb_gpu = len(opt.gpu_ranks)
-
+    init_logger(opt.log_file)
     if opt.world_size > 1:
 
         queues = []
         mp = torch.multiprocessing.get_context('spawn')
-        semaphore = mp.Semaphore(opt.world_size * opt.queue_size)
+        # semaphore = mp.Semaphore(opt.world_size * opt.queue_size)
+        semaphore = None
+
         # Create a thread to listen for errors in the child processes.
         error_queue = mp.SimpleQueue()
         error_handler = ErrorHandler(error_queue)
@@ -154,7 +156,6 @@ def train(opt):
         train_process(opt, device_id=0)
     else:   # case only CPU
         train_process(opt, device_id=-1)
-
 
 def _get_parser():
     parser = ArgumentParser(description='train.py')

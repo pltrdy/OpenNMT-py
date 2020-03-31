@@ -16,8 +16,8 @@ def build_report_manager(opt, gpu_rank):
         
         name = os.path.basename(opt.save_model)
         if not opt.train_from:
-            tensorboard_log_dir += "%s_%s" % (
-                name, datetime.now().strftime("/%b-%d_%H-%M-%S"))
+            tensorboard_log_dir += "/%s_%s" % (
+                name, datetime.now().strftime("%b-%d_%H-%M-%S"))
 
         writer = SummaryWriter(tensorboard_log_dir, comment="Unmt")
     else:
