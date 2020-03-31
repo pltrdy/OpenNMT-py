@@ -724,7 +724,7 @@ def train_opts(parser):
               help="Probabilities of src_noise functions")
     group.add("--replace_positions", "-replace_positions", type=int,
               nargs="+", default=[])
-    group.add("--replace_with_tokens", "-replace_with_tokens", type=str,
+    group.add("--replace_with_id", "-replace_with_id", type=int,
               nargs="+", default=[])
     # learning rate
     group = parser.add_argument_group('Optimization- Rate')
