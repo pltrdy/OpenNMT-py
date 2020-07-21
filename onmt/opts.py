@@ -353,6 +353,7 @@ def model_opts(parser):
     group = parser.add_argument_group('Generator')
     group.add("--abstract", "-abstract", action="store_true")
     group.add("--abstract_lambda", "-abstract_lambda", default=1.0, type=float)
+    group.add("--abstract_ntoks", "-abstract_ntoks", default=10, type=int)
     group.add("--abstract_pen", "-abstract_pen", default=None, type=float)
     group.add("--abstract_metric", "-abstract_metric", default="cosine")
     group.add("--importance", "-importance", action="store_true")

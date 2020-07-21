@@ -78,14 +78,14 @@ class LossWrapper(LossComputeBase):
         return loss, stats
 
 class AbstractiveLossCompute(LossWrapper):
-    def __init__(self, base_loss, abstract_metric="cosine", abstract_lambda=1.0, abstract_pen=None):
+    def __init__(self, base_loss, abstract_metric="cosine", abstract_lambda=1.0, abstract_pen=None, abstract_ntoks=10):
         super(AbstractiveLossCompute, self).__init__(base_loss)
         self.agg = torch.sum
         self.cosine_similarity = torch.nn.functional.cosine_similarity
         self.metric = abstract_metric
         self.abstract_lambda = abstract_lambda
         self.abstract_pen = abstract_pen
-        
+        self.abstract_ntoks = abstract_ntoks
         if abstract_pen is not None:
             assert self.metric == "abstrpen", "abstract pen can only be set with abstrpen metric"
         
@@ -133,6 +133,55 @@ class AbstractiveLossCompute(LossWrapper):
 
         stats.update_additional_metrics(results)
         return None
+
+    def tokagg_mseloss(self, loss, stats, batch, src_embs, tgt_embs, output, target, tgt_lens, *args, **kwargs):
+        src, tgt = batch.src, batch.tgt
+        src, src_lens = src
+ 
+        # tgt starts with <bos>
+        tgt = tgt[1:]
+        output = output
+ 
+        m, b, feats = src.size()
+        n, _b, _feats = tgt.size()
+        __n, __b, dim = output.size()
+        assert n == __n
+        assert _b == b
+        bottled_output = self._bottle(output)
+        scores = self.generator(bottled_output).view(n, b, -1)
+        # COPY_0 = 16
+        # COPY_9 = 26
+        ntoks = self.abstract_ntoks
+        copy_offset = 16
+        
+        tgttok = tgt[0, :, 0] - copy_offset
+        copytok_scores = scores[0, :, copy_offset:(copy_offset+ntoks)]
+        assert_size(copytok_scores, [b, ntoks])
+
+        copytok_probs = torch.nn.functional.softmax(copytok_scores)
+        try:
+            assert 0 <= tgttok.min().item() < ntoks, str(tgttok.min().item())
+            assert 0 <= tgttok.max().item() < ntoks, str(tgttok.max().item())
+        except AssertionError:
+            print(tgt)
+            print(tgttok)
+            print("ntoks", ntoks)
+            raise
+        r = torch.arange(ntoks).to(scores.device).float()
+        r = r.unsqueeze(0).expand_as(copytok_probs)
+        
+
+        copytok = (r * copytok_probs).sum(-1)
+        
+        # print("probs: ", copytok_probs[:5], "toks: ", copytok[:5], "tgt: ", tgttok[:5])
+        
+        # print(copytok_probs[:5], tgttok[:5])
+        criterion = nn.MSELoss(reduce=True, reduction='sum')
+        loss = criterion(copytok, tgttok.float())
+        return loss
+
+    
+
     def abstrpen(self, loss, stats, batch, src_embs, tgt_embs, output, target, tgt_lens, *args, **kwargs):
         def align(X, Y):
             """Given two matrices X [n x b], Y [m x b]
@@ -188,6 +237,64 @@ class AbstractiveLossCompute(LossWrapper):
         scores =  scores * penalties
         loss = torch.nn.functional.nll_loss(self._bottle(scores), tgt.view(-1), ignore_index=self.padding_idx, reduction='sum')
         return loss
+
+    def inv_abstrpen(self, loss, stats, batch, src_embs, tgt_embs, output, target, tgt_lens, *args, **kwargs):
+        def align(X, Y):
+            """Given two matrices X [n x b], Y [m x b]
+               Return mask of Y being in X
+            """
+            def twodims(t):
+                if len(t.size()) == 3:
+                    assert t.size(2) == 1, "Invalid >1 on 3rd dim"
+                    return t.squeeze(2)
+                return t
+            X = twodims(X)
+            Y = twodims(Y)
+            
+            # do not consider
+
+            mask = X.gt(1)
+            
+            n, b = X.size()
+            m, b = Y.size()
+
+            # Reshape both to [m x n x b]
+            XX = X.unsqueeze(0).expand(m, n, b)
+            YY = Y.unsqueeze(1).expand(m, n, b)
+        
+            eq = XX.eq(YY)
+
+            Y_in_X = eq.sum(1).gt(0)
+            return Y_in_X
+
+        src, tgt = batch.src, batch.tgt
+        src, src_lens = src
+ 
+        src = src[2:]
+        tgt = tgt[3:]
+        output = output[2:]
+ 
+        m, b, feats = src.size()
+        n, _b, _feats = tgt.size()
+        __n, __b, dim = output.size()
+        assert _b == b
+        bottled_output = self._bottle(output)
+        scores = self.generator(bottled_output).view(n, b, -1)
+        pred = scores.argmax(2)
+        
+        tgt_in_src = align(src, tgt)
+        assert list(tgt_in_src.size()) == [n, b]
+    
+        penalty = self.abstract_pen if self.abstract_pen is not None else 0.5
+        penalties = torch.ones(scores.size(), dtype=torch.float, device=scores.device)
+        for i in range(b):
+            # print(penalties[:, i, :].size(), src[:, i, 0]())
+            penalties[:, i, :] = penalties[:, i, :].index_fill(-1, src[:, i, 0], penalty)
+        scores =  scores / penalties
+        loss = torch.nn.functional.nll_loss(self._bottle(scores), tgt.view(-1), ignore_index=self.padding_idx, reduction='sum')
+        return loss
+
+
 
 
     def abstrtok(self, loss, stats, batch, src_embs, tgt_embs, output, target, tgt_lens, *args, **kwargs):

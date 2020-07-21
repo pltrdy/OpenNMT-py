@@ -87,11 +87,13 @@ def build_loss_compute(model, tgt_field, opt, train=True):
     if abstract:
         abstract_metric = getattr(opt, "abstract_metric", "cosine")
         abstract_lambda = getattr(opt, "abstract_lambda", 1.0)
+        abstract_ntoks = getattr(opt, "abstract_ntoks", 1.0)
         abstract_pen = getattr(opt, "abstract_pen", None)
         compute = onmt.modules.abstractive_generator.AbstractiveLossCompute(
             compute,
             abstract_metric=abstract_metric,
             abstract_lambda=abstract_lambda,
+            abstract_ntoks=abstract_ntoks,
             abstract_pen=abstract_pen
         )
         # compute = onmt.modules.abstractive_generator.LossWrapper(compute)
