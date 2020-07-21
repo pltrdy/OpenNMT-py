@@ -1,5 +1,5 @@
 import torch
-
+from copy import deepcopy
 
 class DecodeStrategy(object):
     """Base class for generation strategies.
@@ -131,7 +131,6 @@ class DecodeStrategy(object):
            - Before the translation would fail when all beams contained
             repeated ngrams. This is sure to never happen here.
         """
-
         # we don't block nothing if the user doesn't want it
         if self.block_ngram_repeat <= 0:
             return
@@ -148,7 +147,8 @@ class DecodeStrategy(object):
             forbidden_tokens = self.forbidden_tokens[path_idx].get(
                 current_ngram, None)
             if forbidden_tokens is not None:
-                log_probs[path_idx, list(forbidden_tokens)] = -10e20
+                # raise ValueError("Blocking")
+                log_probs[path_idx, list(forbidden_tokens)] = float("-inf")
 
     def maybe_update_forbidden_tokens(self):
         """We complete and reorder the list of forbidden_tokens"""
@@ -168,15 +168,24 @@ class DecodeStrategy(object):
 
             # Reordering forbidden_tokens following beam selection
             # We rebuild a dict to ensure we get the value and not the pointer
-            forbidden_tokens.append(
-                dict(self.forbidden_tokens[path_idx]))
 
+            # forbidden_tokens.append({
+            #         tuple(k): set(v)
+            #         for k, v in self.forbidden_tokens[path_idx].items()
+            # })
+            # forbidden_tokens.append(dict(self.forbidden_tokens[path_idx]))
+            
+            forbidden_tokens.append(deepcopy(self.forbidden_tokens[path_idx]))
+            # forbidden_tokens.append(self.forbidden_tokens[path_idx])
+
+
+            # forbidden_tokens.append(dict(self.forbidden_tokens[path_idx]))
             # Grabing the newly selected tokens and associated ngram
             current_ngram = tuple(seq[-n:].tolist())
 
             # skip the blocking if any token in current_ngram is excluded
-            if set(current_ngram) & self.exclusion_tokens:
-                continue
+            # if set(current_ngram) & self.exclusion_tokens:
+            #    continue
 
             forbidden_tokens[-1].setdefault(current_ngram[:-1], set())
             forbidden_tokens[-1][current_ngram[:-1]].add(current_ngram[-1])

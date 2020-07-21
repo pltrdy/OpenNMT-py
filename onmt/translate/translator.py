@@ -161,6 +161,7 @@ class Translator(object):
         self.ignore_when_blocking = ignore_when_blocking
         self._exclusion_idxs = {
             self._tgt_vocab.stoi[t] for t in self.ignore_when_blocking}
+        # raise ValueError(str(block_ngram_repeat)+str(self._exclusion_idxs))
         self.src_reader = src_reader
         self.tgt_reader = tgt_reader
         self.replace_unk = replace_unk
