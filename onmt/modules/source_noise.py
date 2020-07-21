@@ -24,8 +24,8 @@ class NoiseBase(object):
         source, lengths = batch.src if isinstance(batch.src, tuple) \
             else (batch.src, [None] * batch.src.size(1))
 
-        batch.orig_src = source.clone()
-        source = source * 1
+        # batch.orig_src = source.clone()
+        # source = source * 1
 
         # noise_skip = batch.noise_skip
         # aeq(len(batch.noise_skip) == source.size(1))
@@ -41,9 +41,9 @@ class NoiseBase(object):
             mask = tokens.ne(self.pad_idx)
 
             masked_tokens = tokens[mask]
-            noisy_tokens, length = self.noise_source(
+            o = self.noise_source(
                 masked_tokens, length=lengths[i])
-
+            noisy_tokens, length = o
             lengths[i] = length
 
             # source might increase length so we need to resize the whole
@@ -131,7 +131,7 @@ class SenShufflingNoise(NoiseBase):
             result[index:index + sentence.size(0)] = sentence
             index += sentence.size(0)
         # aeq(source.size(0), length)
-        return result, length
+        return (result, length,)
 
 
 class InfillingNoise(NoiseBase):
@@ -174,7 +174,7 @@ class InfillingNoise(NoiseBase):
         # assert source.min() >= 0
         return self.word_start_mask.gather(0, source)
 
-    def noise_source(self, source, **kwargs):
+    def noise_source(self, source, length, **kwargs):
 
         is_word_start = self.is_word_start(source)
         # assert source.size() == is_word_start.size()
@@ -188,7 +188,7 @@ class InfillingNoise(NoiseBase):
         num_to_mask = (is_word_start.float().sum() * p).ceil().long()
         num_inserts = 0
         if num_to_mask == 0:
-            return source
+            return (source, length,)
 
         if self.mask_span_distribution is not None:
             lengths = self.mask_span_distribution.sample(
@@ -217,8 +217,8 @@ class InfillingNoise(NoiseBase):
             num_inserts = num_to_mask - lengths.size(0)
             num_to_mask -= num_inserts
             if num_to_mask == 0:
-                return self.add_insertion_noise(
-                    source, num_inserts / source.size(0))
+                return (self.add_insertion_noise(
+                    source, num_inserts / source.size(0)), lengths,)
             # assert (lengths > 0).all()
         else:
             raise ValueError("Not supposed to be there")
@@ -294,7 +294,7 @@ class InfillingNoise(NoiseBase):
 
         # aeq(source.eq(self.pad_idx).long().sum(), 0)
         final_length = source.size(0)
-        return source, final_length
+        return (source, final_length,)
 
     def add_insertion_noise(self, tokens, p):
         if p == 0.0:
@@ -404,6 +404,9 @@ class MultiNoise(NoiseBase):
 
     def noise_source(self, source, length=None, **kwargs):
         for noise in self.noises:
-            source, length = noise.noise_source(
+            o = noise.noise_source(
                 source, length=length, **kwargs)
+            
+            assert len(o) == 2, str(noise) + str(o)
+            source, length = o
         return source, length
