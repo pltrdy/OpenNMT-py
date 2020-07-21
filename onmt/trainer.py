@@ -59,6 +59,8 @@ def build_trainer(opt, device_id, model, fields, optim, model_saver=None):
 
     source_noise = None
     if len(opt.src_noise) > 0:
+        print("CREATING SRC NOISE w/")
+        print(opt.src_noise,opt.src_noise_prob, opt.replace_positions,opt.replace_with_id)
         src_field = dict(fields)["src"].base_field
         source_noise = onmt.modules.source_noise.MultiNoise(
             opt.src_noise,
