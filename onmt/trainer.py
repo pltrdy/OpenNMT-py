@@ -390,7 +390,7 @@ class Trainer(object):
 
                 # 3. Compute loss.
                 try:
-                    loss, batch_stats = self.train_loss(
+                    loss, batch_stats, sent_loss = self.train_loss(
                         src_embs,
                         tgt_embs,
                         batch,
