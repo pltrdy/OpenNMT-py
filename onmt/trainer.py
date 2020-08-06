@@ -338,7 +338,7 @@ class Trainer(object):
                                                  with_align=self.with_align)
 
                     # Compute loss.
-                    _, batch_stats = self.valid_loss(
+                    _, batch_stats, _ = self.valid_loss(
                         src_embs, tgt_embs, batch, outputs, attns,
                         decoder_context=dec_context)
 
