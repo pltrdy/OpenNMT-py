@@ -389,40 +389,42 @@ class Trainer(object):
                 bptt = True
 
                 # 3. Compute loss.
-                try:
-                    loss, batch_stats, sent_loss = self.train_loss(
-                        src_embs,
-                        tgt_embs,
-                        batch,
-                        outputs,
-                        attns,
-                        normalization=normalization,
-                        shard_size=self.shard_size,
-                        trunc_start=j,
-                        trunc_size=trunc_size,
-                        decoder_context=dec_context)
+                with torch.autograd.detect_anomaly():
+                    try:
+                        loss, batch_stats, sent_loss = self.train_loss(
+                            src_embs,
+                            tgt_embs,
+                            batch,
+                            outputs,
+                            attns,
+                            normalization=normalization,
+                            shard_size=self.shard_size,
+                            trunc_start=j,
+                            trunc_size=trunc_size,
+                            decoder_context=dec_context)
 
-                    if loss is not None:
-                        # print("BACKWARD")
-                        self.optim.backward(loss)
+                        if loss is not None:
+                            # print("BACKWARD")
+                            self.optim.backward(loss)
 
-                    total_stats.update(batch_stats)
-                    report_stats.update(batch_stats)
+                        total_stats.update(batch_stats)
+                        report_stats.update(batch_stats)
 
-                except Exception:
-                    traceback.print_exc()
-                    logger.info("At step %d, we removed a batch - accum %d",
-                                self.optim.training_step, k)
-                    print("Inspecting params")
-                    for name, p in self.model.named_parameters():
-                        try:
-                            if not p.eq(p).all():
-                                print("NaN in parameters: %s" % name)
-                                print(p)
-                        except Exception:
-                            print("Exeption while examining %s" % name)
-                            print(p)
-                    raise
+                    except Exception:
+                        traceback.print_exc()
+                        logger.info("At step %d, we removed a batch - accum %d",
+                                    self.optim.training_step, k)
+                        print("Inspecting params")
+                        print("Param inspection hard-disabled")
+                        for name, p in self.model.named_parameters():
+                            try:
+                                if not p.eq(p).all():
+                                    print("NaN in parameters: %s" % name)
+                                    # print(p)
+                            except Exception:
+                                print("Exeption while examining %s" % name)
+                                # print(p)
+                        raise
 
                 # 4. Update the parameters and statistics.
                 if self.accum_count == 1:
