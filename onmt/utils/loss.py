@@ -26,7 +26,7 @@ def build_loss_compute(model, tgt_field, opt, train=True):
     padding_idx = tgt_field.vocab.stoi[tgt_field.pad_token]
     unk_idx = tgt_field.vocab.stoi[tgt_field.unk_token]
 
-    if opt.lambda_coverage != 0:
+    if getattr(opt, "lambda_coverage", 0) != 0:
         assert opt.coverage_attn, "--coverage_attn needs to be set in " \
             "order to use --lambda_coverage != 0"
 
