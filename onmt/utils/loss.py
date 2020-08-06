@@ -326,7 +326,8 @@ class NMTLossCompute(LossComputeBase):
         return shard_state
 
     def _compute_loss(self, batch, output, target, std_attn=None,
-                      coverage_attn=None, align_head=None, ref_align=None, **_):
+                      coverage_attn=None, align_head=None, ref_align=None, 
+                      ret_scores=False, **_):
         bottled_output = self._bottle(output)
 
         scores = self.generator(bottled_output)
@@ -353,6 +354,8 @@ class NMTLossCompute(LossComputeBase):
         stats = self._stats(loss.clone(), scores, gtruth)
 
         # print("loss in NMTLossCompute", loss)
+        if ret_scores:
+            return loss, stats, sent_loss, scores
         return loss, stats, sent_loss
 
     def _compute_coverage_loss(self, std_attn, coverage_attn):
