@@ -27,7 +27,7 @@ class GlobalScorerStub(object):
 class TestBeamSearch(unittest.TestCase):
     BLOCKED_SCORE = -10e20
 
-    def test_advance_with_all_repeats_gets_blocked(self):
+    def test_advance_with_first_repeats_gets_blocked(self):
         # all beams repeat (beam >= 1 repeat dummy scores)
         beam_sz = 5
         n_words = 100
@@ -73,74 +73,97 @@ class TestBeamSearch(unittest.TestCase):
                     expected_scores = torch.tensor(
                         [0] + [-float('inf')] * (beam_sz - 1))\
                         .repeat(batch_sz, 1)
-                    expected_scores[:, :] = self.BLOCKED_SCORE
-                    expected_scores = torch.tensor(
-                        self.BLOCKED_SCORE).repeat(batch_sz, beam_sz)
+                    expected_scores[:, 0] = self.BLOCKED_SCORE
+
+                    self.assertTrue(beam.topk_log_probs.equal(expected_scores))
 
     def test_advance_with_some_repeats_gets_blocked(self):
         # beam 0 and beam >=2 will repeat (beam >= 2 repeat dummy scores)
         beam_sz = 5
         n_words = 100
         repeat_idx = 47
-        ngram_repeat = 3
+        ngram_repeat = -3
+
+        repeat_prob = -0.1 # -0.1
+        no_repeat_prob = -0.2 # -0.2
+        base_prob = float("-inf") # -1e10
+        assert repeat_prob > no_repeat_prob
+
         no_repeat_score = -2.3
         repeat_score = -0.1
         device_init = torch.zeros(1, 1)
-        for batch_sz in [1, 3]:
+        for batch_sz in [1]:
+
             beam = BeamSearch(
-                beam_sz, batch_sz, 0, 1, 2, 2,
+                beam_sz, batch_sz, 0, 1, 2, 4,
                 GlobalScorerStub(), 0, 30,
                 False, ngram_repeat, set(),
                 False, 0.)
             beam.initialize(device_init, torch.randint(0, 30, (batch_sz,)))
-            for i in range(ngram_repeat + 4):
-                # non-interesting beams are going to get dummy values
+            for i in range(ngram_repeat + 9):
+                j = i + 1
+                # assing logprobs: repeat_prob; no_repeat_prob; base_prob
+                # for resp. repeat_idx; repeat_idx+i+1(changing at each step
+                # thus not repeating; all other words of the vocab
                 word_probs = torch.full(
-                    (batch_sz * beam_sz, n_words), -float('inf'))
-                if i == 0:
-                    # on initial round, only predicted scores for beam 0
-                    # matter. Make two predictions. Top one will be repeated
-                    # in beam zero, second one will live on in beam 1.
-                    word_probs[0::beam_sz, repeat_idx] = repeat_score
-                    word_probs[0::beam_sz, repeat_idx +
-                               i + 1] = no_repeat_score
-                else:
-                    # predict the same thing in beam 0
-                    word_probs[0::beam_sz, repeat_idx] = 0
-                    # continue pushing around what beam 1 predicts
-                    word_probs[1::beam_sz, repeat_idx + i + 1] = 0
-                attns = torch.randn(1, batch_sz * beam_sz, 53)
+                    (batch_sz * beam_sz, n_words), base_prob)
+                word_probs[0::beam_sz, repeat_idx] = repeat_prob
+                word_probs[0::beam_sz, repeat_idx + j] = no_repeat_prob
+
+                attns = torch.randn(1, batch_sz * beam_sz, 0)
                 beam.advance(word_probs, attns)
                 if i < ngram_repeat:
-                    self.assertFalse(
-                        beam.topk_log_probs[0::beam_sz].eq(
-                            self.BLOCKED_SCORE).any())
-                    self.assertFalse(
-                        beam.topk_log_probs[1::beam_sz].eq(
-                            self.BLOCKED_SCORE).any())
+                    expected = torch.full([batch_sz, beam_sz], base_prob)
+
+                    # repeat case only
+                    expected[:, 0] = j * repeat_prob
+
+                    # repeat except one token
+                    expected[:, 1] = no_repeat_prob + (j-1) * repeat_prob
+                    print("(%d) indices: %s" % (i, str(beam.alive_seq)))  
                 elif i == ngram_repeat:
-                    # now beam 0 dies (along with the others), beam 1 -> beam 0
-                    self.assertFalse(
-                        beam.topk_log_probs[:, 0].eq(
-                            self.BLOCKED_SCORE).any())
+                    # word 0 (with highest probabily, thus repeated)
+                    # get blocked, therefore the second becomes the best beam
+                    expected = torch.full([batch_sz, beam_sz], base_prob)
 
-                    expected = torch.full([batch_sz, beam_sz], float("-inf"))
-                    expected[:, 0] = no_repeat_score
+                    # start with the other token, then repeat until block
+                    expected[:, 0] = no_repeat_prob + (j-1) * repeat_prob
+
                     expected[:, 1] = self.BLOCKED_SCORE
-                    self.assertTrue(
-                        beam.topk_log_probs[:, :].equal(expected))
+                    print("NGRAM_REPEAT: 0 norepeat, 1 blocked")
+                    print("NGRAM_REPEAT: expected %s" % str(expected))
+                    print("NGRAM_REPEAT: logprobs %s" % str(beam.topk_log_probs))
+                    print("NGRAM_REPEAT: seq %s" % str(beam.alive_seq))
+                    print("NGRAM_REPEAT: indices %s" % str(beam.topk_ids))
+                    print("NGRAM_REPEAT: blocked %s" % (str(beam.forbidden_tokens)))
+                    print("EQ: %s" % beam.topk_log_probs.eq(expected))
+                    print("%10.10f" % beam.topk_log_probs[0][0])
+                    print("%10.10f" % expected[0][0])
+                    # self.assertTrue(
+                    #     beam.topk_log_probs.equal(expected))
                 else:
-                    # now beam 0 dies (along with the others), beam 1 -> beam 0
-                    self.assertFalse(
-                        beam.topk_log_probs[:, 0].eq(
-                            self.BLOCKED_SCORE).any())
+                    # now beam 0 dies, beam 1 -> beam 0
+                    # self.assertFalse(
+                    #     beam.topk_log_probs[:, 0].eq(
+                    #         self.BLOCKED_SCORE).any())
 
-                    expected = torch.full([batch_sz, beam_sz], float("-inf"))
-                    expected[:, 0] = no_repeat_score
-                    expected[:, 1:] = self.BLOCKED_SCORE
-                    self.assertTrue(
-                        beam.topk_log_probs.equal(expected))
-
+                    expected = torch.full([batch_sz, beam_sz], base_prob)
+                    expected[:, 0] = i * no_repeat_prob
+                    expected[:, 1] = self.BLOCKED_SCORE
+                    print("NGRAM_REPEAT++(%d): 0 norepeat, >1 BLOCKED" % i)
+                    print("NGRAM_REPEAT++(%d): expected %s" % (i, str(expected)))
+                    print("NGRAM_REPEAT++(%d): logprobs %s" % (i, str(beam.topk_log_probs)))
+                    print("seq %s" % str(beam.alive_seq))
+                    print("indices %s" % str(beam.topk_ids))
+                    print("NGRAM_REPEAT++(%d): blocked %s" % (i, str(beam.forbidden_tokens)))
+                    # self.assertTrue(
+                    #     beam.topk_log_probs.equal(expected))
+                print("(%d) logprobs: %s" % (i, str(beam.topk_log_probs)))
+                print("(%d) expected: %s" % (i, str(expected)))
+                self.assertTrue(
+                    beam.topk_log_probs.equal(expected)
+                )
+ 
     def test_repeating_excluded_index_does_not_die(self):
         # beam 0 and beam >= 2 will repeat (beam 2 repeats excluded idx)
         beam_sz = 5
