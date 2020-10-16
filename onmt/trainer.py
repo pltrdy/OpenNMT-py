@@ -414,14 +414,25 @@ class Trainer(object):
                     logger.info("At step %d, we removed a batch - accum %d",
                                 self.optim.training_step, k)
                     print("Inspecting params")
+<<<<<<< HEAD
+=======
+                    print("Param inspection hard-disabled")
+>>>>>>> fix batch index and disable anomaly detection
                     for name, p in self.model.named_parameters():
                         try:
                             if not p.eq(p).all():
                                 print("NaN in parameters: %s" % name)
+<<<<<<< HEAD
                                 print(p)
                         except Exception:
                             print("Exeption while examining %s" % name)
                             print(p)
+=======
+                                # print(p)
+                        except Exception:
+                            print("Exeption while examining %s" % name)
+                            # print(p)
+>>>>>>> fix batch index and disable anomaly detection
                     raise
 
                 # 4. Update the parameters and statistics.
